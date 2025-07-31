@@ -67,4 +67,13 @@ public class User implements UserDetails {
     public boolean isEnabled() {
         return true;
     }
+
+    @Column(name = "refresh_token")
+    private String refreshToken;
+
+    @Column
+    private String activationCode;
+
+    @Column
+    private boolean activated = false;
 }

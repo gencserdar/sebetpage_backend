@@ -18,6 +18,9 @@ public class JwtService {
     @Value("${jwt.secret}")
     private String secretKey;
 
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
+
     private SecretKey key;
 
     @PostConstruct
@@ -31,7 +34,7 @@ public class JwtService {
                 .subject(user.getEmail())
                 .claim("role", user.getRole().name())
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
+                .expiration(new Date(System.currentTimeMillis() +jwtExpiration))
                 .signWith(key)
                 .compact();
     }
