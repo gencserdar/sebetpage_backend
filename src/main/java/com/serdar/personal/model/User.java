@@ -14,6 +14,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Table(name = "user")
 public class User implements UserDetails {
 
     @Id
@@ -76,4 +77,7 @@ public class User implements UserDetails {
 
     @Column
     private boolean activated = false;
+
+    @Column
+    private String resetCode;
 }

@@ -27,7 +27,7 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-
+    private final EmailService emailService;
 
     @Value("${refresh.expiration.default}")
     private int refresh_expiration_default;
@@ -84,7 +84,10 @@ public class AuthService {
 
         userRepository.save(newUser);
 
-        //sendEmail(newUser.getEmail(), activationCode);
+        String activationLink = "http://localhost:8080/api/auth/activate?code=" + activationCode;
+        emailService.sendActivationEmail(newUser.getEmail(), "Activate your account",
+                "Please click this link to activate: " + activationLink);
+
 
         return ResponseEntity.ok("Registration successful. Please check your email to activate your account.");
 
