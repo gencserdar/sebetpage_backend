@@ -75,8 +75,8 @@ public class User implements UserDetails {
     @Column
     private String activationCode;
 
-    @Column
-    private boolean activated = false;
+    @Column(nullable = false)
+    private Boolean activated = false;
 
     @Column
     private String resetCode;
