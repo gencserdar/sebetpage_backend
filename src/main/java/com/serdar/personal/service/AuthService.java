@@ -15,6 +15,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -103,6 +105,17 @@ public class AuthService {
     }
 
     public AuthResponse refreshToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new InvalidCredentialsException("Missing Authorization header");
+        }
+
+        String oldAccessToken = authHeader.substring(7);
+
+        if (!jwtService.isTokenExpired(oldAccessToken)) {
+            throw new InvalidCredentialsException("Access token is still valid");
+        }
+
         String refreshToken = Arrays.stream(request.getCookies())
                 .filter(c -> c.getName().equals("refreshToken"))
                 .map(Cookie::getValue)
@@ -112,9 +125,11 @@ public class AuthService {
         User user = userRepository.findByRefreshToken(refreshToken)
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
 
-        String accessToken = jwtService.generateToken(user);
-        return new AuthResponse(accessToken);
+        String newAccessToken = jwtService.generateToken(user);
+        return new AuthResponse(newAccessToken);
     }
+
+
 
     public String activate(String code) {
         User user = userRepository.findByActivationCode(code)
@@ -132,11 +147,16 @@ public class AuthService {
             userRepository.save(user);
         }
 
-        Cookie cookie = new Cookie("refreshToken", null);
-        cookie.setHttpOnly(true);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(true) // ilk gönderdiğin çerez secure true idi!
+                .sameSite("Strict") // yine ilk ayarla aynı olmalı
+                .path("/")
+                .maxAge(0)
+                .build();
+
+        response.setHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+
 
         return "Logged out successfully.";
     }

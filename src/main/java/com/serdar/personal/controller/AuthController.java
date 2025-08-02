@@ -38,8 +38,8 @@ public class AuthController {
     }
 
     @GetMapping("/refresh")
-    public ResponseEntity<?> refreshToken(HttpServletRequest request, HttpServletResponse response) {
-        return ResponseEntity.ok(authService.refreshToken(request));
+    public ResponseEntity<Void> refresh() {
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/activate")
@@ -47,7 +47,7 @@ public class AuthController {
         return ResponseEntity.ok(authService.activate(code));
     }
 
-    @GetMapping("/logout")
+    @PostMapping("/logout")
     public ResponseEntity<String> logout(HttpServletResponse response, Authentication authentication) {
         return ResponseEntity.ok(authService.logout(response, authentication));
     }
