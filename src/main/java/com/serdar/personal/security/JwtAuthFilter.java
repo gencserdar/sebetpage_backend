@@ -29,70 +29,109 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final UserRepository userRepository;
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("/api/auth/");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     @NonNull HttpServletResponse response,
                                     @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
+
+
+        // Extract access token from Authorization header
+        String accessToken = null;
         final String authHeader = request.getHeader("Authorization");
-        String accessToken = authHeader != null && authHeader.startsWith("Bearer ")
-                ? authHeader.substring(7) : null;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            accessToken = authHeader.substring(7);
+        }
 
-        boolean newTokenProduced = false;
-        String  newToken         = null;
-
-        if (accessToken != null) {
-            String email;
-            try {
-                email = jwtService.extractUsername(accessToken);
-            } catch (Exception e) {
-                email = null;
+        // If no access token, check refresh token immediately
+        if (accessToken == null) {
+            if (!tryRefreshToken(request, response)) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                response.setContentType("application/json");
+                return; // Don't continue the filter chain
             }
-
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                var userDetails = userDetailsService.loadUserByUsername(email);
+        } else {
+            // Check if access token is valid
+            try {
+                String email = jwtService.extractUsername(accessToken);
+                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                 if (jwtService.isTokenValid(accessToken, userDetails)) {
+                    // Access token is valid - authenticate and proceed
                     setAuth(userDetails, request);
-                    filterChain.doFilter(request, response);
-                    return;
+                } else {
+                    // Access token is invalid/expired - try refresh
+                    if (!tryRefreshToken(request, response)) {
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                        response.setContentType("application/json");
+                        return; // Don't continue the filter chain
+                    }
+                }
+            } catch (Exception e) {
+                // Access token is malformed/expired - try refresh
+                if (!tryRefreshToken(request, response)) {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("{\"error\":\"Unauthorized\"}");
+                    response.setContentType("application/json");
+                    return; // Don't continue the filter chain
                 }
             }
         }
 
-        Optional<String> refreshOpt = getRefreshTokenFromCookies(request);
-        if (refreshOpt.isPresent()) {
-            Optional<User> userOpt = userRepository.findByRefreshToken(refreshOpt.get());
+        filterChain.doFilter(request, response);
+    }
 
-            if (userOpt.isPresent()) {
-                User user = userOpt.get();
-                newToken = jwtService.generateToken(user);
-                newTokenProduced = true;
+    private boolean tryRefreshToken(HttpServletRequest request, HttpServletResponse response) {
+        Optional<String> refreshTokenOpt = getRefreshTokenFromCookies(request);
 
-                setAuth(userDetailsService.loadUserByUsername(user.getEmail()), request);
-            }
+        if (refreshTokenOpt.isEmpty()) {
+            return false; // No refresh token available
         }
 
-        filterChain.doFilter(request, response);
+        String refreshToken = refreshTokenOpt.get();
+        Optional<User> userOpt = userRepository.findByRefreshToken(refreshToken);
 
-        if (newTokenProduced) {
-            response.setHeader("X-New-Token", newToken);
-            if (response.getStatus() == HttpServletResponse.SC_UNAUTHORIZED) {
-                response.setStatus(HttpServletResponse.SC_OK); // logout olmasın
-            }
-        } else {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        if (userOpt.isEmpty()) {
+            return false; // Refresh token not found in database
+        }
+
+        User user = userOpt.get();
+
+        // Check if refresh token is expired
+        if (jwtService.isTokenExpired(refreshToken)) {
+            return false; // Refresh token is expired
+        }
+
+        try {
+            // Generate new access token
+            String newAccessToken = jwtService.generateToken(user);
+
+            // Set authentication context
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
+            setAuth(userDetails, request);
+
+            // Send new token to client
+            response.setHeader("x-new-token", newAccessToken);
+
+            return true; // Successfully refreshed
+        } catch (Exception e) {
+            return false; // Failed to generate new token
         }
     }
 
-    /* ─────────────────────────────────────────────────────────── */
-    private void setAuth(Object userDetails, HttpServletRequest req) {
+    private void setAuth(UserDetails userDetails, HttpServletRequest request) {
         var auth = new UsernamePasswordAuthenticationToken(
-                userDetails,
-                null,
-                ((UserDetails) userDetails).getAuthorities()
+                userDetails, null, userDetails.getAuthorities()
         );
-        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
+        auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(auth);
     }
 

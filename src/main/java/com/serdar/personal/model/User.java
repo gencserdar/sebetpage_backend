@@ -23,6 +23,12 @@ public class User implements UserDetails {
 
     private String name;
 
+    private String surname;
+
+    public String getFullName() {
+        return name + " " + surname;
+    }
+
     @Column(unique = true)
     private String email;
 

@@ -46,6 +46,12 @@ public class AuthService {
     @Value("${server.address}")
     private String address;
 
+    @Value("${frontend.port}")
+    private String front_port;
+
+    @Value("${frontend.address}")
+    private String front_address;
+
     public AuthResponse login(AuthRequest request, HttpServletResponse response) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(UserNotFoundException::new);
@@ -62,7 +68,7 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
 
-        String refreshToken = UUID.randomUUID().toString();
+        String refreshToken = jwtService.generateRefreshToken(user, cookieAge);
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
 
@@ -86,6 +92,7 @@ public class AuthService {
 
         User newUser = User.builder()
                 .name(request.getName())
+                .surname(request.getSurname())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.USER)
@@ -103,33 +110,6 @@ public class AuthService {
         return ResponseEntity.ok("Registration successful. Please check your email to activate your account.");
 
     }
-
-    public AuthResponse refreshToken(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new InvalidCredentialsException("Missing Authorization header");
-        }
-
-        String oldAccessToken = authHeader.substring(7);
-
-        if (!jwtService.isTokenExpired(oldAccessToken)) {
-            throw new InvalidCredentialsException("Access token is still valid");
-        }
-
-        String refreshToken = Arrays.stream(request.getCookies())
-                .filter(c -> c.getName().equals("refreshToken"))
-                .map(Cookie::getValue)
-                .findFirst()
-                .orElseThrow(() -> new InvalidCredentialsException("No refresh token"));
-
-        User user = userRepository.findByRefreshToken(refreshToken)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid refresh token"));
-
-        String newAccessToken = jwtService.generateToken(user);
-        return new AuthResponse(newAccessToken);
-    }
-
-
 
     public String activate(String code) {
         User user = userRepository.findByActivationCode(code)
@@ -169,7 +149,7 @@ public class AuthService {
         user.setResetCode(resetCode);
         userRepository.save(user);
 
-        String resetLink = "http://" + address + ":" + port + "/api/auth/reset-password?code=" + resetCode;
+        String resetLink = "http://" + front_address + ":" + front_port + "/reset-password?code=" + resetCode;
         emailService.sendEmail(user.getEmail(), "Reset your password", "Reset link: " + resetLink);
 
         return "Reset link sent to your email.";

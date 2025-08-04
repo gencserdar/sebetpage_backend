@@ -31,12 +31,6 @@ public class AuthController {
         return authService.register(request);
     }
 
-    @GetMapping("/me")
-    public ResponseEntity<User> getMe(Authentication authentication) {
-        User user = (User) authentication.getPrincipal();
-        return ResponseEntity.ok(user);
-    }
-
     @GetMapping("/refresh")
     public ResponseEntity<Void> refresh() {
         return ResponseEntity.ok().build();

@@ -23,7 +23,7 @@ public class WebConfig {
                         .allowedOrigins("http://localhost:3000")
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
-                        .exposedHeaders("X-New-Token")
+                        .exposedHeaders("x-new-token")
                         .allowCredentials(true);
             }
         };

@@ -40,6 +40,16 @@ public class JwtService {
                 .compact();
     }
 
+    public String generateRefreshToken(User user, int cookieAge) {
+        return Jwts.builder()
+                .subject(user.getEmail())
+                .claim("role", user.getRole().name())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + cookieAge))
+                .signWith(key)
+                .compact();
+    }
+
     public String extractUsername(String token) {
         return Jwts.parser()
                 .verifyWith(key)
