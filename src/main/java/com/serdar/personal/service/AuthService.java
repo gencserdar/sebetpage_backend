@@ -103,6 +103,7 @@ public class AuthService {
                 .role(Role.USER)
                 .activationCode(activationCode)
                 .activated(false)
+                .profileImageUrl("https://sebetpage-pp-images.s3.us-east-1.amazonaws.com/default_pp.png")
                 .build();
 
         userRepository.save(newUser);

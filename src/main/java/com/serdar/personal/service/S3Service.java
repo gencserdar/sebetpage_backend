@@ -8,6 +8,7 @@ import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
@@ -52,5 +53,21 @@ public class S3Service {
                 RequestBody.fromBytes(file.getBytes()));
 
         return "https://" + bucketName + ".s3.amazonaws.com/" + fileName;
+    }
+
+    public void deleteImageFromS3(String imageUrl) {
+        String defaultUrl = "https://" + bucketName + ".s3.amazonaws.com/default_pp.png";
+        if (imageUrl.equals(defaultUrl)) {
+            return;
+        }
+
+        String key = imageUrl.replace("https://" + bucketName + ".s3.amazonaws.com/", "");
+
+        DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
+
+        s3Client.deleteObject(deleteRequest);
     }
 }

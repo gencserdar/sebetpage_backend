@@ -27,11 +27,13 @@ public class ProfileService {
         validateImage(file);
 
         try {
-            String imageUrl = s3Service.uploadFile(file);
-
             String email = SecurityContextHolder.getContext().getAuthentication().getName();
             User user = userRepository.findByEmail(email)
                     .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+            s3Service.deleteImageFromS3(user.getProfileImageUrl());
+
+            String imageUrl = s3Service.uploadFile(file);
 
             user.setProfileImageUrl(imageUrl);
             userRepository.save(user);
@@ -43,12 +45,13 @@ public class ProfileService {
         }
     }
 
+
     private void validateImage(MultipartFile file) {
         if (file.isEmpty()) {
             throw new ImageValidationException("File is empty");
         }
 
-        long maxSize = 5 * 1024 * 1024; // 5 MB
+        long maxSize = 12 * 1024 * 1024; // 5 MB
         if (file.getSize() > maxSize) {
             throw new ImageValidationException("File size exceeds 5 MB limit");
         }
@@ -67,9 +70,6 @@ public class ProfileService {
 
     // ✅ Şifre değiştirme
     public void changePassword(ChangePasswordRequest request) {
-        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
-            throw new InvalidCredentialsException("New password and confirmation do not match");
-        }
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByEmail(email)
