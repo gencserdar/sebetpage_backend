@@ -20,6 +20,7 @@ public class S3Service {
     private final S3Client s3Client;
     private final String bucketName;
 
+
     public S3Service(
             @Value("${aws.accessKey}") String accessKey,
             @Value("${aws.secretKey}") String secretKey,
