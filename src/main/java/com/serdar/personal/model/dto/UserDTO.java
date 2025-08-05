@@ -5,7 +5,10 @@ import com.serdar.personal.model.Role;
 public record UserDTO(
         Long    id,
         String  email,
-        String  fullName,
+        String  name,
+        String  surname,
         boolean activated,
-        Role role
+        Role role,
+        String nickname,
+        String profileImageUrl
 ) {}

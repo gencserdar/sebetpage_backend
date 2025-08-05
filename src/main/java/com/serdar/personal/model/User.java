@@ -32,6 +32,9 @@ public class User implements UserDetails {
     @Column(unique = true)
     private String email;
 
+    @Column(unique = true)
+    private String nickname;
+
     @JsonIgnore
     private String password;
 
@@ -86,4 +89,7 @@ public class User implements UserDetails {
 
     @Column
     private String resetCode;
+
+    @Column
+    private String profileImageUrl;
 }

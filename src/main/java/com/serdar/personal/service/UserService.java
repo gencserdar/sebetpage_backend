@@ -4,6 +4,7 @@ import com.serdar.personal.model.dto.UserDTO;
 import com.serdar.personal.model.User;
 import com.serdar.personal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,6 +14,13 @@ public class UserService {
     private final UserRepository userRepository;
 
     /* ───────────── Public API ───────────── */
+    public UserDTO getCurrentUser() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        return toDTO(user);
+    }
 
     public UserDTO getByEmail(String email) {
         User user = userRepository.findByEmail(email)
@@ -28,13 +36,16 @@ public class UserService {
 
     /* ───────────── Helpers ───────────── */
 
-    private UserDTO toDTO(User u) {
+    public UserDTO toDTO(User u) {
         return new UserDTO(
                 u.getId(),
                 u.getEmail(),
-                u.getFullName(),
+                u.getName(),
+                u.getSurname(),
                 u.getActivated(),
-                u.getRole()
+                u.getRole(),
+                u.getNickname(),
+                u.getProfileImageUrl()
         );
     }
 }

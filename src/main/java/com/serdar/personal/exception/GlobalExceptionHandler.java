@@ -7,6 +7,13 @@ import org.springframework.web.bind.annotation.*;
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(ImageValidationException.class)
+    public ResponseEntity<String> handleImageValidation(ImageValidationException ex) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body("Image validation failed: " + ex.getMessage());
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<String> handleRuntime(RuntimeException ex) {
         return ResponseEntity

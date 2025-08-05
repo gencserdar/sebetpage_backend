@@ -2,6 +2,7 @@ package com.serdar.personal.service;
 
 import com.serdar.personal.exception.EmailAlreadyUsedException;
 import com.serdar.personal.exception.InvalidCredentialsException;
+import com.serdar.personal.exception.NicknameAlreadyUsedException;
 import com.serdar.personal.exception.UserNotFoundException;
 import com.serdar.personal.model.User;
 import com.serdar.personal.model.dto.AuthRequest;
@@ -87,6 +88,9 @@ public class AuthService {
         if (exists) {
             throw new EmailAlreadyUsedException();
         }
+        if (userRepository.findByNickname(request.getNickname()).isPresent()) {
+            throw new NicknameAlreadyUsedException();
+        }
 
         String activationCode = UUID.randomUUID().toString();
 
@@ -95,6 +99,7 @@ public class AuthService {
                 .surname(request.getSurname())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
+                .nickname(request.getNickname())
                 .role(Role.USER)
                 .activationCode(activationCode)
                 .activated(false)
