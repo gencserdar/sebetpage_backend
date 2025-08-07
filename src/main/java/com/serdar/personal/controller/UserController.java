@@ -28,4 +28,11 @@ public class UserController {
     public ResponseEntity<UserDTO> getById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getById(id));
     }
+
+    @GetMapping("/profile/{nickname}")
+    public ResponseEntity<UserDTO> getByNickname(@PathVariable String nickname) {
+        UserDTO user = userService.getByNickname(nickname);
+        return ResponseEntity.ok(user);
+    }
+
 }

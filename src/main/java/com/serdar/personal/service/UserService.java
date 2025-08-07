@@ -5,6 +5,7 @@ import com.serdar.personal.model.User;
 import com.serdar.personal.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -25,6 +26,12 @@ public class UserService {
     public UserDTO getByEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("User not found"));
+        return toDTO(user);
+    }
+
+    public UserDTO getByNickname(String nickname) {
+        User user = userRepository.findByNickname(nickname)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
         return toDTO(user);
     }
 
