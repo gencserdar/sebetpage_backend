@@ -20,7 +20,7 @@ public class FriendRequestService {
     private final FriendRequestRepository friendRequestRepository;
     private final FriendshipRepository friendshipRepository;
     private final UserContextService userContextService;
-    private final FriendsService friendsService;
+    private final FriendService friendService;
 
     public void sendFriendRequest(String toNickname) {
         User fromUser = userContextService.getCurrentUser();
@@ -32,7 +32,7 @@ public class FriendRequestService {
         }
 
         // Zaten arkadaş mı?
-        if (friendsService.areAlreadyFriends(fromUser, toUser)) {
+        if (friendService.areAlreadyFriends(fromUser, toUser)) {
             throw new IllegalStateException("You are already friends.");
         }
 
@@ -84,7 +84,7 @@ public class FriendRequestService {
         }
 
         if (accept) {
-            if (!friendsService.areAlreadyFriends(request.getFromUser(), request.getToUser())) {
+            if (!friendService.areAlreadyFriends(request.getFromUser(), request.getToUser())) {
                 createFriendship(request.getFromUser(), request.getToUser());
             }
             friendRequestRepository.delete(request);
