@@ -37,6 +37,4 @@ public class FriendController {
         List<UserDTO> friends = friendService.getFriends(currentUser);
         return ResponseEntity.ok(friends);
     }
-
-
 }
