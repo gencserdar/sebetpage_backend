@@ -87,7 +87,7 @@ public class FriendRequestService {
             if (!friendsService.areAlreadyFriends(request.getFromUser(), request.getToUser())) {
                 createFriendship(request.getFromUser(), request.getToUser());
             }
-            request.setStatus(FriendRequest.RequestStatus.ACCEPTED);
+            friendRequestRepository.delete(request);
         } else {
             friendRequestRepository.delete(request);
         }

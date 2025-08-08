@@ -7,5 +7,7 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class FriendStatusResponse {
-    private String status; // "friends", "sent", "received", "none"
+    private String status; // friends, sent, received, etc.
+    private Long requestId; // sadece 'received' ise set edilir
 }
+
