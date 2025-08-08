@@ -25,6 +25,13 @@ public class WebConfig {
                         .allowedHeaders("*")
                         .exposedHeaders("x-new-token")
                         .allowCredentials(true);
+
+                // SockJS specific CORS
+                registry.addMapping("/ws/**")
+                        .allowedOrigins("http://localhost:3000")
+                        .allowedMethods("*")
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
             }
         };
     }
@@ -39,7 +46,7 @@ public class WebConfig {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/ws/**", config);
         return source;
     }
-
 }
