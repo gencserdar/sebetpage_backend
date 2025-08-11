@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
     Page<Message> findByConversationIdOrderByCreatedAtDesc(Long conversationId, Pageable pageable);
@@ -24,4 +25,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     @Query("SELECT COUNT(m) FROM Message m WHERE m.conversation.id = :conversationId")
     int countByConversationId(@Param("conversationId") Long conversationId);
+
+    Optional<Message> findTopByConversationIdAndSenderIdAndCreatedAtLessThanEqualOrderByCreatedAtDesc(
+            Long conversationId, Long senderId, LocalDateTime createdAt
+    );
 }
