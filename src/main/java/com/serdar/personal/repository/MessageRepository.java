@@ -18,4 +18,10 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
       WHERE m.conversation.id = :convId AND m.createdAt > :lastReadAt
     """)
     long countUnread(@Param("convId") Long convId, @Param("lastReadAt") LocalDateTime lastReadAt);
+
+    @Query("SELECT COUNT(m) FROM Message m WHERE m.conversation.id = :conversationId AND m.createdAt > :lastReadAt")
+    int countByConversationIdAndCreatedAtAfter(@Param("conversationId") Long conversationId, @Param("lastReadAt") LocalDateTime lastReadAt);
+
+    @Query("SELECT COUNT(m) FROM Message m WHERE m.conversation.id = :conversationId")
+    int countByConversationId(@Param("conversationId") Long conversationId);
 }

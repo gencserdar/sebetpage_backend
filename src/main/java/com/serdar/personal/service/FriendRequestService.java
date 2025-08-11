@@ -21,6 +21,7 @@ public class FriendRequestService {
     private final FriendshipRepository friendshipRepository;
     private final UserContextService userContextService;
     private final FriendService friendService;
+    private final FriendWebSocketService friendWebSocketService; // Add this
 
     public void sendFriendRequest(String toNickname) {
         User fromUser = userContextService.getCurrentUser();
@@ -39,7 +40,22 @@ public class FriendRequestService {
         // Ters yönlü istek var mı? (B → A)
         boolean reverseExists = friendRequestRepository.existsByFromUserAndToUser(toUser, fromUser);
         if (reverseExists) {
+            // Get the reverse request before creating friendship
+            FriendRequest reverseRequest = friendRequestRepository.findByFromUserAndToUser(toUser, fromUser)
+                    .orElse(null);
+
             createFriendship(toUser, fromUser);
+
+            // Delete the reverse request and send events
+            if (reverseRequest != null) {
+                friendRequestRepository.delete(reverseRequest);
+                // Send accepted event for the reverse request
+                friendWebSocketService.sendFriendRequestAccepted(reverseRequest);
+            }
+
+            // Send friend added event
+            friendWebSocketService.sendFriendAdded(fromUser, toUser);
+            return; // Don't create a new request, friendship is already created
         }
 
         // Zaten istek atılmış mı?
@@ -48,7 +64,6 @@ public class FriendRequestService {
             throw new IllegalStateException("Request already sent.");
         }
 
-
         FriendRequest request = FriendRequest.builder()
                 .fromUser(fromUser)
                 .toUser(toUser)
@@ -56,7 +71,10 @@ public class FriendRequestService {
                 .sentAt(LocalDateTime.now())
                 .build();
 
-        friendRequestRepository.save(request);
+        FriendRequest savedRequest = friendRequestRepository.save(request);
+
+        // 🚀 Send WebSocket event to the recipient
+        friendWebSocketService.sendFriendRequestReceived(savedRequest);
     }
 
     public List<FriendRequest> getIncomingRequests() {
@@ -87,12 +105,20 @@ public class FriendRequestService {
             if (!friendService.areAlreadyFriends(request.getFromUser(), request.getToUser())) {
                 createFriendship(request.getFromUser(), request.getToUser());
             }
+
+            // 🚀 Send WebSocket events for acceptance
+            friendWebSocketService.sendFriendRequestAccepted(request);
+            friendWebSocketService.sendFriendAdded(request.getFromUser(), request.getToUser());
+
             friendRequestRepository.delete(request);
         } else {
+            // 🚀 Send WebSocket event for rejection
+            friendWebSocketService.sendFriendRequestRejected(request);
             friendRequestRepository.delete(request);
         }
 
-        friendRequestRepository.save(request);
+        // Remove this line - we're deleting the request above
+        // friendRequestRepository.save(request);
     }
 
     // Yardımcı fonksiyonlar

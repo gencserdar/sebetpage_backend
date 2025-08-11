@@ -21,8 +21,9 @@ public class FriendService {
     private final UserContextService userContextService;
     private final UserRepository userRepository;
     private final FriendRequestRepository friendRequestRepository;
-    private final  FriendshipRepository friendshipRepository;
+    private final FriendshipRepository friendshipRepository;
     private final UserService userService;
+    private final FriendWebSocketService friendWebSocketService; // Add this
 
     public Map<String, Object> getFriendStatus(String otherNickname) {
         User currentUser = userContextService.getCurrentUser();
@@ -65,7 +66,16 @@ public class FriendService {
         Optional<Friendship> friendshipOpt = friendshipRepository
                 .findByUsers(userId1, userId2);
 
-        friendshipOpt.ifPresent(friendshipRepository::delete);
+        if (friendshipOpt.isPresent()) {
+            Friendship friendship = friendshipOpt.get();
+            User user1 = friendship.getUser1();
+            User user2 = friendship.getUser2();
+
+            friendshipRepository.delete(friendship);
+
+            // 🚀 Send WebSocket event for friend removal
+            friendWebSocketService.sendFriendRemoved(user1, user2);
+        }
     }
 
     public List<UserDTO> getFriends(User currentUser) {
@@ -80,5 +90,4 @@ public class FriendService {
                 })
                 .collect(Collectors.toList());
     }
-
 }
