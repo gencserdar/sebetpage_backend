@@ -44,4 +44,3 @@ public class GroupController {
         return groupService.myGroups(me.getName());
     }
 }
-

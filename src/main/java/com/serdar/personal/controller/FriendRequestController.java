@@ -8,7 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/friend-request")
@@ -18,9 +20,18 @@ public class FriendRequestController {
     private final FriendRequestService friendRequestService;
 
     @PostMapping("/send/{nickname}")
-    public ResponseEntity<String> sendFriendRequest(@PathVariable String nickname) {
-        friendRequestService.sendFriendRequest(nickname);
-        return ResponseEntity.ok("Friend request sent.");
+    public ResponseEntity<Map<String, Object>> sendFriendRequest(@PathVariable String nickname) {
+        Long requestId = friendRequestService.sendFriendRequest(nickname);
+
+        Map<String, Object> response = new HashMap<>();
+        if (requestId != null) {
+            response.put("status", "sent");
+            response.put("requestId", requestId);
+        } else {
+            response.put("status", "friends"); // Auto-accepted due to reverse request
+        }
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/incoming")
@@ -40,5 +51,11 @@ public class FriendRequestController {
     ) {
         friendRequestService.respondToRequest(requestId, accept);
         return ResponseEntity.ok("Friend request " + (accept ? "accepted" : "rejected") + ".");
+    }
+
+    @DeleteMapping("/cancel/{requestId}")
+    public ResponseEntity<String> cancelOutgoingRequest(@PathVariable Long requestId) {
+        friendRequestService.cancelOutgoingRequest(requestId);
+        return ResponseEntity.ok("Friend request canceled.");
     }
 }

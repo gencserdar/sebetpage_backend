@@ -17,4 +17,11 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
 
     @Query("SELECT cp FROM ConversationParticipant cp WHERE cp.conversation.id = :conversationId AND cp.deletedAt IS NULL")
     List<ConversationParticipant> findByConversationIdAndDeletedAtIsNull(@Param("conversationId") Long conversationId);
+
+    @Query("""
+    select p.user.id 
+    from ConversationParticipant p 
+    where p.conversation.id = :cid and p.user.id <> :senderId
+    """)
+    Long findOtherUserId(long cid, long senderId);
 }

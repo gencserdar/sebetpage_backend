@@ -184,4 +184,19 @@ public class FriendWebSocketService {
         userData.put("profileImageUrl", user.getProfileImageUrl());
         return userData;
     }
+
+    public void sendFriendRequestCancelled(User toUser, FriendRequest cancelledRequest) {
+        Map<String, Object> message = Map.of(
+                "type", "FRIEND_REQUEST_CANCELLED",
+                "requestId", cancelledRequest.getId(),
+                "fromUserId", cancelledRequest.getFromUser().getId(),
+                "toUserId", cancelledRequest.getToUser().getId()
+        );
+
+        messagingTemplate.convertAndSendToUser(
+                toUser.getEmail(),
+                "/queue/friends",
+                message
+        );
+    }
 }

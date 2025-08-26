@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final UserContextService userContextService; // ✅ eklendi
+    private final BlockService blockService;             // ✅ eklendi
 
     /* ───────────── Public API ───────────── */
     public UserDTO getCurrentUser() {
@@ -30,9 +32,17 @@ public class UserService {
     }
 
     public UserDTO getByNickname(String nickname) {
-        User user = userRepository.findByNickname(nickname)
+        User me = userContextService.getCurrentUser();
+        User target = userRepository.findByNickname(nickname)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        return toDTO(user);
+
+        // ✅ beni engelleyen varsa profilini açtırma
+        if (blockService.blocksMe(me.getId(), target.getId())) {
+            throw new UsernameNotFoundException("User not found");
+        }
+
+        // (Ben target'ı engellemişsem yine görebilirim → unblock için)
+        return toDTO(target);
     }
 
     public UserDTO getById(Long id) {

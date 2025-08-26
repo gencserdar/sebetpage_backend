@@ -40,6 +40,7 @@ public class ChatService {
     private final SimpMessagingTemplate messagingTemplate;
     private final AesGcmService aes;
     private final FriendService friendService;
+    private final BlockService blockService;
 
     /** userId -> açık WS session sayısı (çoklu tab desteği) */
     private final Map<Long, AtomicInteger> sessions = new ConcurrentHashMap<>();
@@ -130,15 +131,30 @@ public class ChatService {
             log.info("ChatService.send() - conv={}, sender={}, content='{}'",
                     conversationId, senderId, plaintext);
 
-            if (plaintext == null || plaintext.isBlank())
+            if (plaintext == null || plaintext.isBlank()) {
                 throw new IllegalArgumentException("Empty message");
-            if (plaintext.length() > 2000)
+            }
+            if (plaintext.length() > 2000) {
                 throw new IllegalArgumentException("Message too long");
+            }
 
-            // Güvenlik: gönderen o konuşmanın katılımcısı mı?
+            // Gönderen bu konuşmanın katılımcısı mı?
             var senderPart = participantRepo.findByConversationIdAndUserId(conversationId, senderId);
             if (senderPart.isEmpty()) {
                 throw new IllegalArgumentException("Sender not in conversation");
+            }
+
+            // ✅ ENGEL KONTROLÜ: diğer katılımcıyı bul ve block kontrolü yap
+            List<ConversationParticipant> parts =
+                    participantRepo.findByConversationIdAndDeletedAtIsNull(conversationId);
+            Long otherUserId = parts.stream()
+                    .map(p -> p.getUser().getId())
+                    .filter(uid -> !uid.equals(senderId))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Conversation must have another participant"));
+
+            if (blockService.isBlockedEitherWay(senderId, otherUserId)) {
+                throw new RuntimeException("Messaging is blocked");
             }
 
             Conversation conv = convRepo.findById(conversationId)
@@ -165,6 +181,7 @@ public class ChatService {
             throw e;
         }
     }
+
 
     /** WS payload’ı kaydet + user-queue’ya yayın + unread event */
     @Transactional

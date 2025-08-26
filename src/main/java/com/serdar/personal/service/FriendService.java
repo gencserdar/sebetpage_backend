@@ -36,16 +36,21 @@ public class FriendService {
         if (areAlreadyFriends(currentUser, otherUser)) {
             return Map.of("status", "friends");
         }
-        if (friendRequestRepository.existsByFromUserAndToUser(currentUser, otherUser)) {
-            return Map.of("status", "sent");
+
+        // Check for outgoing request (sent by current user)
+        Optional<FriendRequest> outgoingRequest = friendRequestRepository
+                .findByFromUserAndToUser(currentUser, otherUser);
+        if (outgoingRequest.isPresent()) {
+            return Map.of("status", "sent", "requestId", outgoingRequest.get().getId());
         }
-        if (friendRequestRepository.existsByFromUserAndToUser(otherUser, currentUser)) {
-            Long requestId = friendRequestRepository
-                    .findByFromUserAndToUser(otherUser, currentUser)
-                    .map(FriendRequest::getId)
-                    .orElse(null);
-            return Map.of("status", "received", "requestId", requestId);
+
+        // Check for incoming request (sent to current user)
+        Optional<FriendRequest> incomingRequest = friendRequestRepository
+                .findByFromUserAndToUser(otherUser, currentUser);
+        if (incomingRequest.isPresent()) {
+            return Map.of("status", "received", "requestId", incomingRequest.get().getId());
         }
+
         return Map.of("status", "none");
     }
 
