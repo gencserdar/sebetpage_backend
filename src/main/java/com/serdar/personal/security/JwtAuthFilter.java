@@ -15,7 +15,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.util.AntPathMatcher;          // ★ NEW
+import org.springframework.util.AntPathMatcher;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -30,21 +30,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final CustomUserDetailsService userDetailsService;
     private final UserRepository userRepository;
 
-    /* ----------  NEW : paths that completely skip this filter ---------- */
     private static final AntPathMatcher matcher = new AntPathMatcher();
     private static final List<String> SKIP_PATHS = List.of(
-            "/api/auth/**",   // your existing public endpoints
-            "/ws/**",         // SockJS handshake + transports (/ws/info, /ws/**/**)
-            "/ws"             // raw endpoint hit by the initial handshake
+            "/api/auth/login",           // public login
+            "/api/auth/register",        // public register
+            "/api/auth/activate",        // public activation
+            "/api/auth/forgot-password", // public forgot password
+            "/api/auth/reset-password",  // public reset password
+            "/api/auth/refresh",         // ✅ Skip refresh endpoint - handle it in controller
+            "/ws/**",                    // WebSocket paths
+            "/ws"
     );
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();     // use servlet path for matching
-        return SKIP_PATHS.stream().anyMatch(p -> matcher.match(p, path));
+        String path = request.getServletPath();
+        boolean shouldSkip = SKIP_PATHS.stream().anyMatch(p -> matcher.match(p, path));
+        if (shouldSkip) {
+            System.out.println("Skipping filter for path: " + path); // ✅ Debug log
+        }
+        return shouldSkip;
     }
-
-    /* ------------------------------------------------------------------ */
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -52,15 +58,19 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
-        /* ---- existing logic stays exactly as-is ---- */
+        System.out.println("JWT Filter processing: " + request.getServletPath()); // ✅ Debug log
+
         String accessToken = null;
         final String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             accessToken = authHeader.substring(7);
+            System.out.println("Found access token in header"); // ✅ Debug log
         }
 
         if (accessToken == null) {
+            System.out.println("No access token, trying refresh..."); // ✅ Debug log
             if (!tryRefreshToken(request, response)) {
+                System.out.println("Refresh failed, sending 401"); // ✅ Debug log
                 send401(response);
                 return;
             }
@@ -70,12 +80,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                 if (jwtService.isTokenValid(accessToken, userDetails)) {
+                    System.out.println("Access token valid for user: " + email); // ✅ Debug log
                     setAuth(userDetails, request);
-                } else if (!tryRefreshToken(request, response)) {
-                    send401(response);
-                    return;
+                } else {
+                    System.out.println("Access token invalid, trying refresh..."); // ✅ Debug log
+                    if (!tryRefreshToken(request, response)) {
+                        send401(response);
+                        return;
+                    }
                 }
             } catch (Exception e) {
+                System.out.println("Error validating token: " + e.getMessage()); // ✅ Debug log
                 if (!tryRefreshToken(request, response)) {
                     send401(response);
                     return;
@@ -86,8 +101,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    /* --------------- unchanged helper methods ------------------------- */
-
     private void send401(HttpServletResponse response) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json");
@@ -96,11 +109,24 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private boolean tryRefreshToken(HttpServletRequest request, HttpServletResponse response) {
         Optional<String> refreshTokenOpt = getRefreshTokenFromCookies(request);
-        if (refreshTokenOpt.isEmpty()) return false;
+        if (refreshTokenOpt.isEmpty()) {
+            System.out.println("No refresh token found in cookies"); // ✅ Debug log
+            return false;
+        }
 
         String refreshToken = refreshTokenOpt.get();
+        System.out.println("Found refresh token: " + refreshToken.substring(0, Math.min(10, refreshToken.length())) + "..."); // ✅ Debug log
+
         Optional<User> userOpt = userRepository.findByRefreshToken(refreshToken);
-        if (userOpt.isEmpty() || jwtService.isTokenExpired(refreshToken)) return false;
+        if (userOpt.isEmpty()) {
+            System.out.println("User not found for refresh token"); // ✅ Debug log
+            return false;
+        }
+
+        if (jwtService.isTokenExpired(refreshToken)) {
+            System.out.println("Refresh token expired"); // ✅ Debug log
+            return false;
+        }
 
         try {
             User user = userOpt.get();
@@ -108,8 +134,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
             setAuth(userDetails, request);
             response.setHeader("x-new-token", newAccessToken);
+            System.out.println("Token refreshed successfully for user: " + user.getEmail()); // ✅ Debug log
             return true;
         } catch (Exception e) {
+            System.out.println("Error during token refresh: " + e.getMessage()); // ✅ Debug log
             return false;
         }
     }

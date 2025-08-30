@@ -44,12 +44,16 @@ public class JwtService {
                 .compact();
     }
 
-    public String generateRefreshToken(User user, int cookieAge) {
+    public String generateRefreshToken(User user, int cookieAgeSeconds) {
+        // Convert seconds to milliseconds for JWT expiration
+        long expirationMs = cookieAgeSeconds * 1000L;
+
         return Jwts.builder()
                 .subject(user.getEmail())
                 .claim("role", user.getRole().name())
+                .claim("type", "refresh") // Mark as refresh token
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + cookieAge))
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key)
                 .compact();
     }
@@ -64,8 +68,13 @@ public class JwtService {
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        try {
+            final String username = extractUsername(token);
+            return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+        } catch (Exception e) {
+            System.out.println("Token validation error: " + e.getMessage());
+            return false;
+        }
     }
 
     public boolean isTokenExpired(String token) {
@@ -77,8 +86,13 @@ public class JwtService {
                     .getPayload()
                     .getExpiration();
 
-            return expiration.before(new Date());
+            boolean expired = expiration.before(new Date());
+            if (expired) {
+                System.out.println("Token expired at: " + expiration + ", current time: " + new Date());
+            }
+            return expired;
         } catch (Exception e) {
+            System.out.println("Error checking token expiration: " + e.getMessage());
             return true;
         }
     }

@@ -24,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -53,6 +54,9 @@ public class AuthService {
     @Value("${frontend.address}")
     private String front_address;
 
+    @Value("${app.environment:dev}") // ✅ Add environment detection
+    private String environment;
+
     public AuthResponse login(AuthRequest request, HttpServletResponse response) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(UserNotFoundException::new);
@@ -69,18 +73,25 @@ public class AuthService {
 
         String token = jwtService.generateToken(user);
 
-        String refreshToken = jwtService.generateRefreshToken(user, cookieAge);
+        String refreshToken = jwtService.generateRefreshToken(user, cookieAge); // Keep as int (seconds)
         user.setRefreshToken(refreshToken);
         userRepository.save(user);
 
+        // ✅ Fixed cookie creation for localhost compatibility
         Cookie cookie = new Cookie("refreshToken", refreshToken);
         cookie.setHttpOnly(true);
         cookie.setPath("/");
         cookie.setMaxAge(cookieAge);
+
+        // ✅ Only set secure in production
+        if ("prod".equals(environment)) {
+            cookie.setSecure(true);
+        }
+
         response.addCookie(cookie);
 
+        System.out.println("Login successful for user: " + user.getEmail()); // ✅ Debug log
         return new AuthResponse(token);
-
     }
 
     public ResponseEntity<String> register(RegisterRequest request) {
@@ -112,9 +123,7 @@ public class AuthService {
         emailService.sendEmail(newUser.getEmail(), "Activate your account",
                 "Please click this link to activate: " + activationLink);
 
-
         return ResponseEntity.ok("Registration successful. Please check your email to activate your account.");
-
     }
 
     public String activate(String code) {
@@ -131,19 +140,19 @@ public class AuthService {
             User user = (User) authentication.getPrincipal();
             user.setRefreshToken(null);
             userRepository.save(user);
+            System.out.println("Cleared refresh token for user: " + user.getEmail()); // ✅ Debug log
         }
 
+        // ✅ Fixed logout cookie clearing to match login settings
         ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true)
-                .secure(true) // ilk gönderdiğin çerez secure true idi!
-                .sameSite("Strict") // yine ilk ayarla aynı olmalı
+                .secure("prod".equals(environment)) // ✅ Only secure in production
+                .sameSite("Lax") // ✅ Changed from Strict to Lax
                 .path("/")
                 .maxAge(0)
                 .build();
 
         response.setHeader(HttpHeaders.SET_COOKIE, cookie.toString());
-
-
         return "Logged out successfully.";
     }
 
@@ -172,9 +181,36 @@ public class AuthService {
         return "Password reset successful.";
     }
 
+    // ✅ Add method for refresh endpoint to use
+    public AuthResponse refresh(HttpServletRequest request, HttpServletResponse response) {
+        Optional<String> refreshTokenOpt = getRefreshTokenFromCookies(request);
+        if (refreshTokenOpt.isEmpty()) {
+            throw new InvalidCredentialsException("No refresh token found");
+        }
 
+        String refreshToken = refreshTokenOpt.get();
+        Optional<User> userOpt = userRepository.findByRefreshToken(refreshToken);
 
+        if (userOpt.isEmpty()) {
+            throw new InvalidCredentialsException("Invalid refresh token");
+        }
 
+        if (jwtService.isTokenExpired(refreshToken)) {
+            throw new InvalidCredentialsException("Refresh token expired");
+        }
 
+        User user = userOpt.get();
+        String newAccessToken = jwtService.generateToken(user);
 
+        System.out.println("Refresh successful for user: " + user.getEmail()); // ✅ Debug log
+        return new AuthResponse(newAccessToken);
+    }
+
+    private Optional<String> getRefreshTokenFromCookies(HttpServletRequest request) {
+        if (request.getCookies() == null) return Optional.empty();
+        return Arrays.stream(request.getCookies())
+                .filter(c -> "refreshToken".equals(c.getName()))
+                .map(Cookie::getValue)
+                .findFirst();
+    }
 }

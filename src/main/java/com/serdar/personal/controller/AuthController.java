@@ -14,7 +14,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 
-
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -32,9 +31,20 @@ public class AuthController {
         return authService.register(request);
     }
 
-    @GetMapping("/refresh")
-    public ResponseEntity<Void> refresh() {
-        return ResponseEntity.ok().build();
+    @PostMapping("/refresh") // ✅ Changed to POST and added proper logic
+    public ResponseEntity<AuthResponse> refresh(HttpServletRequest request, HttpServletResponse response) {
+        try {
+            System.out.println("Refresh endpoint called"); // ✅ Debug log
+            AuthResponse authResponse = authService.refresh(request, response);
+
+            // ✅ Set the new token in response header for frontend to catch
+            response.setHeader("x-new-token", authResponse.getToken());
+
+            return ResponseEntity.ok(authResponse);
+        } catch (InvalidCredentialsException e) {
+            System.out.println("Refresh failed: " + e.getMessage()); // ✅ Debug log
+            return ResponseEntity.status(401).body(null);
+        }
     }
 
     @GetMapping("/activate")
