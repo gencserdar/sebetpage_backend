@@ -45,6 +45,12 @@ jwt:
   expiration: ${JWT_EXPIRATION}
 
 refresh:
+  # HMAC-SHA-256 key used to hash refresh tokens at rest. Base64-encoded
+  # 32+ random bytes. Generate: openssl rand -base64 32
+  # If this leaks alongside the DB, attackers can verify-but-not-forge
+  # refresh tokens — i.e., they could use stolen JWT cookies. Treat as
+  # secret. Rotating it logs everyone out (forces re-login on next refresh).
+  hmac-key: ${REFRESH_TOKEN_HMAC_KEY}
   expiration:
     default:  ${REFRESH_EXPIRATION_DEFAULT}
     remember: ${REFRESH_EXPIRATION_REMEMBER}

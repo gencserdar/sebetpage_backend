@@ -35,6 +35,7 @@ public class AuthDomainService {
     private final PasswordEncoder encoder;
     private final JwtIssuer jwt;
     private final EmailService email;
+    private final RefreshTokenHasher refreshHasher;
 
     @Value("${refresh.expiration.default}")  int refreshDefault;
     @Value("${refresh.expiration.remember}") int refreshRemember;
@@ -92,14 +93,15 @@ public class AuthDomainService {
         int cookieAge = rememberMe ? refreshRemember : refreshDefault;
         String access = jwt.issueAccess(c);
         String refresh = jwt.issueRefresh(c, cookieAge);
-        // Hash the refresh token at rest. If the DB ever leaks, the row alone
-        // doesn't grant session access — attacker would need both the row
-        // (hash) and the cleartext refresh JWT (cookie) to validate.
-        c.setRefreshToken(encoder.encode(refresh));
+        // Refresh-token-at-rest is HMAC-SHA-256, not bcrypt. The token is a
+        // 256-bit random JWT — bcrypt's anti-brute-force slowness adds zero
+        // value here and burns ~200ms of CPU per login. See RefreshTokenHasher
+        // for the rationale.
+        c.setRefreshToken(refreshHasher.hash(refresh));
         c.setRememberMe(rememberMe);
         repo.save(c);
         // The plaintext refresh JWT goes back to the client (HttpOnly cookie);
-        // the DB only ever sees the bcrypt hash.
+        // the DB only ever sees the HMAC hash.
         return new LoginResult(c, access, refresh, cookieAge);
     }
 
@@ -111,11 +113,11 @@ public class AuthDomainService {
      * vs. default), so the total session is sliding: staying active keeps you
      * signed in; two days/30 days of silence logs you out.
      *
-     * Implementation note: refresh tokens are stored as bcrypt hashes (see
-     * login()), so we can't look the user up by token equality anymore.
-     * Instead we parse the JWT (verifies signature with our key, so it can
-     * only have come from us) to recover the user id, then bcrypt-match the
-     * submitted token against the stored hash.
+     * Implementation note: refresh tokens are stored as HMAC-SHA-256 hashes
+     * (legacy rows may still be in bcrypt format — RefreshTokenHasher.matches
+     * accepts both during the migration window). We parse the JWT first
+     * (signature-verifies that the token came from us), pull the uid out
+     * of its claims, then verify the submitted token against the stored hash.
      */
     @Transactional
     public LoginResult refresh(String refreshToken) {
@@ -139,18 +141,22 @@ public class AuthDomainService {
         Credential c = repo.findById(uid)
                 .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
 
-        // The submitted token must match the bcrypt hash on file. A previous
-        // refresh would've rotated the hash, so a stolen-and-cached refresh
-        // token stops working as soon as the legitimate user refreshes.
+        // Token must match the stored hash. RefreshTokenHasher accepts both
+        // HMAC (new format) and bcrypt (legacy rows from before the migration)
+        // so existing sessions keep working through one rotation cycle.
         if (c.getRefreshToken() == null
-                || !encoder.matches(refreshToken, c.getRefreshToken())) {
+                || !refreshHasher.matches(refreshToken, c.getRefreshToken())) {
             throw ServiceException.unauth("Invalid refresh token");
         }
 
         int cookieAge = Boolean.TRUE.equals(c.getRememberMe()) ? refreshRemember : refreshDefault;
         String newAccess  = jwt.issueAccess(c);
         String newRefresh = jwt.issueRefresh(c, cookieAge);
-        c.setRefreshToken(encoder.encode(newRefresh));
+        // Always rotate AND always rewrite as HMAC — this is the path that
+        // drains legacy bcrypt rows out of the DB without any explicit
+        // migration job: every active session moves to HMAC on its next
+        // refresh, dormant sessions drop off naturally when they expire.
+        c.setRefreshToken(refreshHasher.hash(newRefresh));
         repo.save(c);
         return new LoginResult(c, newAccess, newRefresh, cookieAge);
     }
