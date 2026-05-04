@@ -1,0 +1,58 @@
+# Every value below is sourced from the environment. No defaults — Spring
+# refuses to boot if a key is missing. Use `.env.example` as the template.
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+  # SMTP creds live in mail-worker — auth-service only publishes mail jobs.
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+server:
+  # HTTP port only used by Spring actuator; all domain traffic is gRPC.
+  port: ${AUTH_HTTP_PORT}
+
+app:
+  internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  reset-code-ttl-minutes: ${RESET_CODE_TTL_MINUTES}
+  reset-code-max-attempts: ${RESET_CODE_MAX_ATTEMPTS}
+  account-change-code-ttl-minutes: ${ACCOUNT_CHANGE_CODE_TTL_MINUTES}
+  account-change-code-max-attempts: ${ACCOUNT_CHANGE_CODE_MAX_ATTEMPTS}
+
+grpc:
+  server:
+    port: ${AUTH_GRPC_PORT}
+    enable-keep-alive: true
+    security:
+      enabled: ${GRPC_SERVER_SECURITY_ENABLED}
+      client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION}
+
+refresh:
+  expiration:
+    default:  ${REFRESH_EXPIRATION_DEFAULT}
+    remember: ${REFRESH_EXPIRATION_REMEMBER}
+
+# Used to build links inside emails (activation, password reset). Must be
+# host-reachable URLs — NOT internal docker service names — because users
+# click them from their browser.
+frontend:
+  base-url: ${FRONTEND_BASE_URL}
+gateway:
+  base-url: ${GATEWAY_BASE_URL}

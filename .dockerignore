@@ -1,0 +1,10 @@
+# Keep build context small — everything Docker doesn't need.
+**/target
+**/.idea
+**/.vscode
+**/.mvn
+**/*.iml
+**/.git
+**/.gitignore
+**/README.md
+**/node_modules

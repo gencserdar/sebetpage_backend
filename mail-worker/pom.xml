@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.serdar</groupId>
+        <artifactId>social-platform-parent</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>mail-worker</artifactId>
+    <name>mail-worker</name>
+    <description>
+        Background consumer for mail jobs. Listens on a RabbitMQ queue
+        populated by other services (currently just auth-service for
+        activation, password-reset, change-email/password verification, and
+        old-email change-notice mails). Owns the SMTP credentials so the
+        producers stay ignorant of how delivery actually happens.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- Jackson — required by Spring AMQP's Jackson2JsonMessageConverter.
+             The plain `spring-boot-starter` does NOT pull in Jackson (only
+             web/jpa/security do), so without this the converter bean fails
+             to instantiate at boot with NoClassDefFoundError on
+             com.fasterxml.jackson.databind.json.JsonMapper. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-json</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

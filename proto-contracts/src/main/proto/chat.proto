@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package com.serdar.proto.chat;
+option java_multiple_files = true;
+option java_package = "com.serdar.proto.chat";
+
+import "common.proto";
+
+service ChatService {
+  rpc GetOrCreateDirect (GetOrCreateDirectRequest) returns (Conversation);
+  rpc SendMessage       (SendMessageRequest)       returns (ChatMessage);
+  rpc GetPage           (GetPageRequest)           returns (MessagePage);
+  rpc GetLatest         (GetLatestRequest)         returns (MessageList);
+  rpc MarkRead          (MarkReadRequest)          returns (MarkReadResponse);
+  rpc GetReadState      (ReadStateRequest)         returns (ReadStateResponse);
+  rpc GetUnreadCounts   (com.serdar.proto.common.IdRequest) returns (UnreadCountsResponse);
+  rpc MyConversations   (com.serdar.proto.common.IdRequest) returns (ConversationList);
+
+  // Server-stream for WebSocket bridging: gateway subscribes per user and relays
+  // to its STOMP clients.
+  rpc SubscribeEvents   (com.serdar.proto.common.IdRequest) returns (stream ChatEvent);
+}
+
+enum ConversationType {
+  CONVERSATION_TYPE_UNSPECIFIED = 0;
+  DIRECT = 1;
+  GROUP = 2;
+}
+
+message Conversation {
+  int64  id = 1;
+  ConversationType type = 2;
+  int64  user_a_id = 3;
+  int64  user_b_id = 4;
+  string title = 5;
+  int64  created_at_millis = 6;
+}
+
+message ConversationList { repeated Conversation conversations = 1; }
+
+message GetOrCreateDirectRequest {
+  int64 user_a_id = 1;
+  int64 user_b_id = 2;
+}
+
+message SendMessageRequest {
+  int64  conversation_id = 1;
+  int64  sender_id = 2;
+  string plaintext = 3;
+}
+
+message ChatMessage {
+  int64  id = 1;
+  int64  conversation_id = 2;
+  int64  sender_id = 3;
+  string content = 4; // plaintext — service decrypts before returning
+  int64  created_at_millis = 5;
+}
+
+message MessageList { repeated ChatMessage messages = 1; }
+
+message GetPageRequest {
+  int64 conversation_id = 1;
+  int64 caller_id = 2;
+  int32 page = 3;
+  int32 size = 4;
+}
+
+message MessagePage {
+  repeated ChatMessage messages = 1; // DESC order (newest first)
+  int32 page = 2;
+  int32 size = 3;
+  int64 total = 4;
+}
+
+message GetLatestRequest {
+  int64 conversation_id = 1;
+  int64 caller_id = 2;
+  int32 limit = 3;
+}
+
+message MarkReadRequest {
+  int64 conversation_id = 1;
+  int64 reader_id = 2;
+}
+
+message MarkReadResponse {
+  int64 conversation_id = 1;
+  int32 unread_count = 2;
+  int32 total_unread_count = 3;
+  int64 last_read_at_millis = 4;
+}
+
+message ReadStateRequest {
+  int64 conversation_id = 1;
+  int64 caller_id = 2;
+}
+
+message ReadStateResponse {
+  int64 my_last_read_at_millis = 1;
+  int64 friend_last_read_at_millis = 2;
+  int64 seen_my_message_id = 3;
+  int64 friend_user_id = 4;
+  int64 my_user_id = 5;
+}
+
+message UnreadCountsResponse {
+  int32 total_count = 1;
+  map<int64, int32> per_conversation = 2;
+}
+
+message ChatEvent {
+  string type = 1; // MESSAGE | READ | PRESENCE_UPDATE | PRESENCE_SNAPSHOT | UNREAD_COUNT_UPDATE
+  int64  conversation_id = 2;
+  ChatMessage message = 3;
+  int64  reader_id = 4;
+  int64  last_read_at_millis = 5;
+  int64  subject_user_id = 6;
+  bool   online = 7;
+  int32  unread_count = 8;
+  int32  total_unread_count = 9;
+  repeated PresenceEntry presence_snapshot = 10;
+}
+
+message PresenceEntry {
+  int64 user_id = 1;
+  bool  online = 2;
+}

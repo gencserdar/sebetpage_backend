@@ -1,0 +1,15 @@
+# Real secrets — must be set per environment, never committed.
+.env
+.env.local
+.env.*.local
+*.env
+
+# Build artifacts (shouldn't be committed in microservice repos either)
+target/
+*.class
+
+# IDE / editor noise
+.idea/
+*.iml
+.vscode/
+.DS_Store

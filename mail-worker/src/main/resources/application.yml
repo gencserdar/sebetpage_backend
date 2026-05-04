@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: mail-worker
+
+  # SMTP — every value comes from `.env`. mail-worker refuses to boot if any
+  # of these is missing. Use Gmail values from .env.example as a starting
+  # point; for real Gmail you must set MAIL_PASSWORD to an App Password,
+  # not your account password.
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail.smtp.auth: ${MAIL_SMTP_AUTH}
+      mail.smtp.starttls.enable: ${MAIL_SMTP_STARTTLS}
+      # SSL trust string defaults to the SMTP host because they're almost
+      # always the same; override with MAIL_SMTP_SSL_TRUST if your relay
+      # uses a different cert chain.
+      mail.smtp.ssl.trust: ${MAIL_SMTP_SSL_TRUST:${MAIL_HOST}}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    listener:
+      simple:
+        # Worker tuning: 1–5 concurrent consumers per node, prefetch 10. SMTP
+        # is the bottleneck — bump these only if SMTP can keep up.
+        concurrency: 1
+        max-concurrency: 5
+        prefetch: 10
+        # 4 retries with exponential backoff (1s, 2s, 4s, capped at 10s).
+        # After that the message dead-letters to mail.dlq for triage.
+        retry:
+          enabled: true
+          initial-interval: 1000
+          multiplier: 2
+          max-interval: 10000
+          max-attempts: 4
+
+# No HTTP server needed; this process is a pure consumer.
+server:
+  port: -1

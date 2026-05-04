@@ -1,0 +1,195 @@
+# Local orchestration of the microservice split.
+#
+# Strategy: every Spring app loads its config from `.env` via `env_file`.
+# Compose-level `${VAR:?required}` guards on the SECRETS make compose itself
+# refuse to start without `.env` filled in — fail-fast at deploy time
+# instead of crashing inside the container 30 seconds in.
+#
+# Internal hostnames (rabbitmq, *-db) are constants of this docker-compose
+# topology, NOT secrets — keeping them inline so the docker network wiring
+# stays self-contained.
+
+services:
+  # --------- databases (one per service) -----------------------------------
+  auth-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required (see .env.example)}
+      MYSQL_DATABASE: auth_db
+    ports: ["127.0.0.1:${AUTH_DB_PORT}:3306"]
+    volumes: [auth_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  user-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      MYSQL_DATABASE: user_db
+    ports: ["127.0.0.1:${USER_DB_PORT}:3306"]
+    volumes: [user_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  group-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      MYSQL_DATABASE: group_db
+    ports: ["127.0.0.1:${GROUP_DB_PORT}:3306"]
+    volumes: [group_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  chat-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+      MYSQL_DATABASE: chat_db
+    ports: ["127.0.0.1:${CHAT_DB_PORT}:3306"]
+    volumes: [chat_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?RABBITMQ_USER required (see .env.example)}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:?RABBITMQ_PASS required}
+    ports:
+      # Loopback-only — services reach RabbitMQ via the docker DNS name on
+      # port 5672 regardless of the host port mapping.
+      - "127.0.0.1:${RABBITMQ_AMQP_PORT}:5672"
+      - "127.0.0.1:${RABBITMQ_MGMT_PORT}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # --------- services ------------------------------------------------------
+  # Each service:
+  #   - `env_file: .env`   — the entire .env is exposed to the container,
+  #                          so every ${VAR} placeholder in application.yml
+  #                          can resolve.
+  #   - `environment:`     — overrides for things that differ from .env
+  #                          (notably DB_URL and AUTH_SERVICE_GRPC, which
+  #                          must use docker DNS names regardless of what
+  #                          the local-dev .env says).
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    depends_on:
+      auth-db: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://auth-db:3306/auth_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      RABBITMQ_HOST: rabbitmq
+      # auth-service config keys are RABBITMQ_USERNAME / RABBITMQ_PASSWORD
+      # (Spring's spring.rabbitmq.username/password). The .env names are
+      # RABBITMQ_USER / RABBITMQ_PASS (RabbitMQ image's own convention).
+      # Re-export under the names the app expects.
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:?RABBITMQ_USER required}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASS:?RABBITMQ_PASS required}
+    expose: ["${AUTH_HTTP_PORT}", "${AUTH_GRPC_PORT}"]
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    depends_on:
+      user-db: { condition: service_healthy }
+      auth-service: { condition: service_started }
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://user-db:3306/user_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      AUTH_SERVICE_GRPC: static://auth-service:9101
+    expose: ["${USER_HTTP_PORT}", "${USER_GRPC_PORT}"]
+
+  group-service:
+    build:
+      context: .
+      dockerfile: group-service/Dockerfile
+    depends_on:
+      group-db: { condition: service_healthy }
+      user-service: { condition: service_started }
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://group-db:3306/group_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      USER_SERVICE_GRPC: static://user-service:9102
+    expose: ["${GROUP_HTTP_PORT}", "${GROUP_GRPC_PORT}"]
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: chat-service/Dockerfile
+    depends_on:
+      chat-db: { condition: service_healthy }
+      user-service: { condition: service_started }
+    env_file:
+      - .env
+    environment:
+      DB_URL: jdbc:mysql://chat-db:3306/chat_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      USER_SERVICE_GRPC: static://user-service:9102
+    expose: ["${CHAT_HTTP_PORT}", "${CHAT_GRPC_PORT}"]
+
+  # Async mail dispatcher. Pulls jobs off mail.queue and hands them to SMTP.
+  # Failed jobs land in mail.dlq for inspection in the RabbitMQ UI.
+  mail-worker:
+    build:
+      context: .
+      dockerfile: mail-worker/Dockerfile
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USERNAME: ${RABBITMQ_USER:?RABBITMQ_USER required}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASS:?RABBITMQ_PASS required}
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    depends_on:
+      auth-service: { condition: service_started }
+      user-service: { condition: service_started }
+      group-service: { condition: service_started }
+      chat-service: { condition: service_started }
+    env_file:
+      - .env
+    environment:
+      # Inside the docker network the gateway reaches services by service
+      # name, NOT the host-mapped names from .env.
+      AUTH_GRPC_HOST: auth-service
+      USER_GRPC_HOST: user-service
+      GROUP_GRPC_HOST: group-service
+      CHAT_GRPC_HOST: chat-service
+    ports: ["${GATEWAY_PORT}:${GATEWAY_PORT}"]
+
+volumes:
+  auth_data:
+  user_data:
+  group_data:
+  chat_data:
+  rabbitmq_data:

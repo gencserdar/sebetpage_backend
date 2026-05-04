@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package com.serdar.proto.auth;
+option java_multiple_files = true;
+option java_package = "com.serdar.proto.auth";
+
+import "common.proto";
+
+// Auth-service owns credentials: id, email, nickname, password, role, activation,
+// refresh token, reset code. All other user fields (name, surname, profile image)
+// live in user-service.
+service AuthService {
+  rpc Register         (RegisterRequest)        returns (RegisterResponse);
+  rpc Login            (LoginRequest)           returns (AuthResponse);
+  rpc Refresh          (RefreshRequest)         returns (AuthResponse);
+  rpc Logout           (LogoutRequest)          returns (com.serdar.proto.common.Empty);
+  rpc Activate         (ActivateRequest)        returns (com.serdar.proto.common.BoolResponse);
+  rpc ForgotPassword   (ForgotPasswordRequest)  returns (com.serdar.proto.common.Empty);
+  rpc ResetPassword    (ResetPasswordRequest)   returns (com.serdar.proto.common.BoolResponse);
+  rpc ChangePassword   (ChangePasswordRequest)  returns (com.serdar.proto.common.BoolResponse);
+
+  // Token validation (called by every gateway request + WS handshake).
+  rpc ValidateToken    (ValidateTokenRequest)   returns (ValidateTokenResponse);
+
+  // Lookup RPCs — used by user-service and gateway.
+  rpc GetCredentialsById       (com.serdar.proto.common.IdRequest)     returns (Credentials);
+  rpc GetCredentialsByEmail    (com.serdar.proto.common.StringRequest) returns (Credentials);
+  rpc GetCredentialsByNickname (com.serdar.proto.common.StringRequest) returns (Credentials);
+
+  // Uniqueness checks (user-service calls these when changing email/nickname).
+  rpc IsEmailTaken     (com.serdar.proto.common.StringRequest) returns (com.serdar.proto.common.BoolResponse);
+  rpc IsNicknameTaken  (com.serdar.proto.common.StringRequest) returns (com.serdar.proto.common.BoolResponse);
+
+  // Atomic credential mutations initiated by user-service after its own checks.
+  rpc UpdateEmail      (UpdateEmailRequest)     returns (com.serdar.proto.common.BoolResponse);
+  rpc UpdateNickname   (UpdateNicknameRequest)  returns (com.serdar.proto.common.BoolResponse);
+
+  // Two-step email/password change with email-delivered 6-digit codes.
+  // Request* generates and emails a code, storing the pending payload on the
+  // credential row. Confirm* validates the code and applies the change.
+  // Codes expire after a fixed window and tolerate a small number of bad
+  // attempts before invalidating to defeat brute-forcing.
+  rpc RequestEmailChange    (RequestEmailChangeRequest)    returns (com.serdar.proto.common.Empty);
+  rpc ConfirmEmailChange    (ConfirmCodeRequest)           returns (ConfirmEmailChangeResponse);
+  rpc RequestPasswordChange (RequestPasswordChangeRequest) returns (com.serdar.proto.common.Empty);
+  rpc ConfirmPasswordChange (ConfirmCodeRequest)           returns (com.serdar.proto.common.BoolResponse);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+message Credentials {
+  int64  id = 1;
+  string email = 2;
+  string nickname = 3;
+  Role   role = 4;
+  bool   activated = 5;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+}
+
+message RegisterResponse {
+  int64  user_id = 1;
+  string email = 2;
+  string nickname = 3;
+  string activation_code = 4; // returned so user-service or mailer can use it
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+  bool   remember_me = 3;
+}
+
+message AuthResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64  user_id = 3;
+  string email = 4;
+  string nickname = 5;
+  Role   role = 6;
+  int32  refresh_cookie_age_seconds = 7;
+}
+
+message RefreshRequest {
+  string refresh_token = 1;
+}
+
+message LogoutRequest {
+  int64 user_id = 1;
+}
+
+message ActivateRequest {
+  string activation_code = 1;
+}
+
+message ForgotPasswordRequest {
+  string email = 1;
+}
+
+message ResetPasswordRequest {
+  string reset_code = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordRequest {
+  int64  user_id = 1;
+  string current_password = 2;
+  string new_password = 3;
+}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateTokenResponse {
+  bool   valid = 1;
+  int64  user_id = 2;
+  string email = 3;
+  string nickname = 4;
+  Role   role = 5;
+}
+
+message UpdateEmailRequest {
+  int64  user_id = 1;
+  string new_email = 2;
+}
+
+message UpdateNicknameRequest {
+  int64  user_id = 1;
+  string new_nickname = 2;
+}
+
+message RequestEmailChangeRequest {
+  int64  user_id = 1;
+  string new_email = 2;
+}
+
+message RequestPasswordChangeRequest {
+  int64  user_id = 1;
+  string current_password = 2;
+  string new_password = 3;
+}
+
+message ConfirmCodeRequest {
+  int64  user_id = 1;
+  string code = 2;
+}
+
+message ConfirmEmailChangeResponse {
+  bool   ok = 1;
+  string new_email = 2; // empty when ok=false
+}

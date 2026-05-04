@@ -1,0 +1,74 @@
+# Every value below is sourced from the environment. No defaults — Spring
+# refuses to boot if any required key is missing, which is intentional.
+# Use `.env.example` as a template for the required keys.
+
+server:
+  port: ${GATEWAY_PORT}
+
+spring:
+  application:
+    name: api-gateway
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE}
+      max-request-size: ${MAX_UPLOAD_SIZE}
+
+app:
+  environment: ${APP_ENV}
+  allowed-origins: ${ALLOWED_ORIGINS}
+  trust-proxy-headers: ${TRUST_PROXY_HEADERS}
+  ws-ticket-ttl-seconds: ${WS_TICKET_TTL_SECONDS}
+  internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  rate-limit:
+    login:
+      capacity: ${RATE_LIMIT_LOGIN_CAPACITY}
+      window-seconds: ${RATE_LIMIT_LOGIN_WINDOW_SECONDS}
+    register:
+      capacity: ${RATE_LIMIT_REGISTER_CAPACITY}
+      window-seconds: ${RATE_LIMIT_REGISTER_WINDOW_SECONDS}
+    forgot-password:
+      capacity: ${RATE_LIMIT_FORGOT_PASSWORD_CAPACITY}
+      window-seconds: ${RATE_LIMIT_FORGOT_PASSWORD_WINDOW_SECONDS}
+    request-email-change:
+      capacity: ${RATE_LIMIT_REQUEST_EMAIL_CHANGE_CAPACITY}
+      window-seconds: ${RATE_LIMIT_REQUEST_EMAIL_CHANGE_WINDOW_SECONDS}
+    request-password-change:
+      capacity: ${RATE_LIMIT_REQUEST_PASSWORD_CHANGE_CAPACITY}
+      window-seconds: ${RATE_LIMIT_REQUEST_PASSWORD_CHANGE_WINDOW_SECONDS}
+    activate:
+      capacity: ${RATE_LIMIT_ACTIVATE_CAPACITY}
+      window-seconds: ${RATE_LIMIT_ACTIVATE_WINDOW_SECONDS}
+    reset-password:
+      capacity: ${RATE_LIMIT_RESET_PASSWORD_CAPACITY}
+      window-seconds: ${RATE_LIMIT_RESET_PASSWORD_WINDOW_SECONDS}
+
+# net.devh gRPC client endpoints. Hosts are env-driven so the same artifact
+# runs locally (loopback), in docker-compose (service names), or in k8s (DNS).
+grpc:
+  client:
+    GLOBAL:
+      negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
+    auth-service:
+      address: static://${AUTH_GRPC_HOST}:${AUTH_GRPC_PORT}
+    user-service:
+      address: static://${USER_GRPC_HOST}:${USER_GRPC_PORT}
+    group-service:
+      address: static://${GROUP_GRPC_HOST}:${GROUP_GRPC_PORT}
+    chat-service:
+      address: static://${CHAT_GRPC_HOST}:${CHAT_GRPC_PORT}
+
+# Don't leak DB / disk paths via default actuator surface. Health is
+# sufficient for an external probe.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.serdar.gateway: INFO
+    net.devh.boot.grpc: INFO

@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: chat-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+
+server:
+  port: ${CHAT_HTTP_PORT}
+
+app:
+  internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+
+grpc:
+  server:
+    port: ${CHAT_GRPC_PORT}
+    security:
+      enabled: ${GRPC_SERVER_SECURITY_ENABLED}
+      client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}
+  client:
+    GLOBAL:
+      negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
+    user-service:
+      address: ${USER_SERVICE_GRPC}
+
+chat:
+  aes:
+    # AES-256-GCM requires exactly 32 decoded bytes. No default — service
+    # refuses to boot without one. Generate with: openssl rand -base64 32
+    # If this leaks, every encrypted message in the DB is decryptable.
+    key: ${CHAT_AES_KEY_BASE64}

@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package com.serdar.proto.user;
+option java_multiple_files = true;
+option java_package = "com.serdar.proto.user";
+
+import "common.proto";
+
+// User-service owns: user profile (name, surname, profileImageUrl) keyed by
+// the auth user id; Friendships, FriendRequests, UserBlocks, Search.
+service UserService {
+  // Profile
+  rpc CreateProfile     (CreateProfileRequest)  returns (UserProfile);
+  rpc GetProfile        (com.serdar.proto.common.IdRequest) returns (UserProfile);
+  rpc GetProfileByEmail (com.serdar.proto.common.StringRequest) returns (UserProfile);
+  rpc GetProfileByNickname(com.serdar.proto.common.StringRequest) returns (UserProfile);
+  rpc UpdateProfilePhoto(UpdateProfilePhotoRequest) returns (UserProfile);
+  rpc UpdateNameSurname (UpdateNameSurnameRequest) returns (UserProfile);
+  // Nickname + email changes are coordinated: user-service checks local rules,
+  // delegates uniqueness to auth-service, then mirrors the new value locally.
+  rpc ChangeNickname    (ChangeNicknameRequest) returns (UserProfile);
+  rpc ChangeEmail       (ChangeEmailRequest)    returns (UserProfile);
+  // Internal — used by the gateway after auth-service confirms a verified
+  // email change. Skips the uniqueness check (auth already enforced it) and
+  // just mirrors the new value into the profile row so denormalized email
+  // fields stay in sync.
+  rpc SyncProfileEmail  (ChangeEmailRequest)    returns (UserProfile);
+
+  // Friendships
+  rpc GetFriendStatus   (GetFriendStatusRequest) returns (FriendStatusResponse);
+  rpc ListFriends       (com.serdar.proto.common.IdRequest) returns (UserList);
+  rpc ListFriendIds     (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.IdList);
+  rpc RemoveFriend      (RemoveFriendRequest) returns (com.serdar.proto.common.Empty);
+
+  // Friend requests
+  rpc SendFriendRequest  (SendFriendRequestRequest) returns (SendFriendRequestResponse);
+  rpc ListIncoming       (com.serdar.proto.common.IdRequest) returns (FriendRequestList);
+  rpc ListOutgoing       (com.serdar.proto.common.IdRequest) returns (FriendRequestList);
+  rpc RespondToRequest   (RespondToRequestRequest) returns (com.serdar.proto.common.Empty);
+  rpc CancelRequest      (CancelRequestRequest) returns (com.serdar.proto.common.Empty);
+
+  // Blocks
+  rpc Block              (BlockRequest) returns (com.serdar.proto.common.Empty);
+  rpc Unblock            (BlockRequest) returns (com.serdar.proto.common.Empty);
+  rpc MyBlocks           (com.serdar.proto.common.IdRequest) returns (BlockList);
+  rpc BlockStatus        (BlockStatusRequest) returns (BlockStatusResponse);
+  rpc IsBlockedEitherWay (BlockStatusRequest) returns (com.serdar.proto.common.BoolResponse);
+
+  // Search (user results only; group-service contributes its own half)
+  rpc SearchUsers        (SearchRequest) returns (UserSearchList);
+}
+
+message UserProfile {
+  int64  id = 1;
+  string email = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+  string profile_image_url = 6;
+  bool   activated = 7;
+  string role = 8;
+}
+
+message UserList   { repeated UserProfile users = 1; }
+message UserSummary {
+  int64  id = 1;
+  string nickname = 2;
+  string name = 3;
+  string surname = 4;
+  string profile_image_url = 5;
+  int32  mutual_friend_count = 6;
+}
+message UserSearchList { repeated UserSummary users = 1; }
+
+message CreateProfileRequest {
+  int64  user_id = 1;
+  string email = 2;
+  string nickname = 3;
+  string name = 4;
+  string surname = 5;
+}
+
+message UpdateProfilePhotoRequest {
+  int64  user_id = 1;
+  bytes  image_bytes = 2;
+  string content_type = 3;
+  string original_filename = 4;
+}
+
+message UpdateNameSurnameRequest {
+  int64  user_id = 1;
+  string name = 2;
+  string surname = 3;
+}
+
+message ChangeNicknameRequest {
+  int64  user_id = 1;
+  string new_nickname = 2;
+}
+
+message ChangeEmailRequest {
+  int64  user_id = 1;
+  string new_email = 2;
+}
+
+message GetFriendStatusRequest {
+  int64  caller_id = 1;
+  string other_nickname = 2;
+}
+
+message FriendStatusResponse {
+  string status = 1;       // friends | sent | received | none
+  int64  request_id = 2;   // populated when status in (sent, received)
+  int64  other_user_id = 3;
+}
+
+message RemoveFriendRequest {
+  int64 user_a = 1;
+  int64 user_b = 2;
+}
+
+message SendFriendRequestRequest {
+  int64  from_user_id = 1;
+  string to_nickname = 2;
+}
+
+message SendFriendRequestResponse {
+  string status = 1;    // sent | friends (auto-accepted a mirrored incoming)
+  int64  request_id = 2;
+  int64  to_user_id = 3;
+}
+
+message FriendRequest {
+  int64  id = 1;
+  int64  from_user_id = 2;
+  int64  to_user_id = 3;
+  string status = 4;
+  int64  sent_at_millis = 5;
+  UserProfile from_user = 6;
+  UserProfile to_user = 7;
+}
+message FriendRequestList { repeated FriendRequest requests = 1; }
+
+message RespondToRequestRequest {
+  int64 request_id = 1;
+  int64 responder_id = 2;
+  bool  accept = 3;
+}
+
+message CancelRequestRequest {
+  int64 request_id = 1;
+  int64 canceller_id = 2;
+}
+
+message BlockRequest {
+  int64 blocker_id = 1;
+  int64 blocked_id = 2;
+}
+
+message Block {
+  int64  id = 1;
+  int64  blocker_id = 2;
+  int64  blocked_id = 3;
+  string blocked_nickname = 4;
+  string blocked_profile_image_url = 5;
+  int64  created_at_millis = 6;
+}
+message BlockList { repeated Block blocks = 1; }
+
+message BlockStatusRequest {
+  int64 caller_id = 1;
+  int64 other_id = 2;
+}
+message BlockStatusResponse {
+  bool blocked_by_me = 1;
+  bool blocks_me = 2;
+  bool either = 3;
+}
+
+message SearchRequest {
+  int64  caller_id = 1;
+  string keyword = 2;
+}

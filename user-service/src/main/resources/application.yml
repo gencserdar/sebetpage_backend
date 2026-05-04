@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: user-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate: { ddl-auto: update }
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE}
+      max-request-size: ${MAX_UPLOAD_SIZE}
+
+server:
+  port: ${USER_HTTP_PORT}
+
+app:
+  internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+
+grpc:
+  server:
+    port: ${USER_GRPC_PORT}
+    security:
+      enabled: ${GRPC_SERVER_SECURITY_ENABLED}
+      client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}
+  client:
+    GLOBAL:
+      negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
+    auth-service:
+      address: ${AUTH_SERVICE_GRPC}
+
+aws:
+  accessKey: ${AWS_ACCESS_KEY}
+  secretKey: ${AWS_SECRET_KEY}
+  region: ${AWS_REGION}
+  s3:
+    bucketName: ${AWS_BUCKET_NAME}
+    publicBaseUrl: ${AWS_S3_PUBLIC_BASE_URL}

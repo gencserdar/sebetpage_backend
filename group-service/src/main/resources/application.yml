@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: group-service
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+
+server:
+  port: ${GROUP_HTTP_PORT}
+
+app:
+  internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+
+grpc:
+  server:
+    port: ${GROUP_GRPC_PORT}
+    security:
+      enabled: ${GRPC_SERVER_SECURITY_ENABLED}
+      client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}
+  client:
+    GLOBAL:
+      negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
+    user-service:
+      address: ${USER_SERVICE_GRPC}
