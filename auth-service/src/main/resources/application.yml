@@ -36,6 +36,8 @@ grpc:
   server:
     port: ${AUTH_GRPC_PORT}
     enable-keep-alive: true
+    permit-keep-alive-without-calls: true
+    permit-keep-alive-time: 20s
     security:
       enabled: ${GRPC_SERVER_SECURITY_ENABLED}
       client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}

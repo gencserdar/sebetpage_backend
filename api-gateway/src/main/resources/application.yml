@@ -68,6 +68,9 @@ grpc:
       keep-alive-without-calls: true
     auth-service:
       address: static://${AUTH_GRPC_HOST}:${AUTH_GRPC_PORT}
+      keep-alive-time: 30s
+      keep-alive-timeout: 5s
+      keep-alive-without-calls: true
     user-service:
       address: static://${USER_GRPC_HOST}:${USER_GRPC_PORT}
     group-service:
