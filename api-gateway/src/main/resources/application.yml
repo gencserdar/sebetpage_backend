@@ -60,6 +60,12 @@ grpc:
   client:
     GLOBAL:
       negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
+      # Send a keepalive ping every 30 s so the channel never goes idle between
+      # proactive token refreshes (~45 s apart). Without this, the first request
+      # after an idle window pays a full gRPC reconnect cost (~300 ms).
+      keep-alive-time: 30s
+      keep-alive-timeout: 5s
+      keep-alive-without-calls: true
     auth-service:
       address: static://${AUTH_GRPC_HOST}:${AUTH_GRPC_PORT}
     user-service:

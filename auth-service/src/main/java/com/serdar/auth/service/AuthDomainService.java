@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -52,7 +51,6 @@ public class AuthDomainService {
 
     private final CredentialRepository repo;
     private final SessionRepository    sessions;
-    private final SessionCacheService  sessionCache;
     private final PasswordEncoder      encoder;
     private final JwtIssuer            jwt;
     private final EmailService         email;
@@ -145,7 +143,6 @@ public class AuthDomainService {
         String refresh = jwt.issueRefresh(c, session.getId(), cookieAge);
         session.setTokenHash(refreshHasher.hash(refresh));
         sessions.save(session);
-        sessionCache.put(session);
 
         return new LoginResult(c, access, refresh, cookieAge, session.getId());
     }
@@ -188,11 +185,8 @@ public class AuthDomainService {
 
         String hash = refreshHasher.hash(refreshToken);
 
-        // 1. Try Redis first; on miss fall back to DB and populate cache.
-        Session session = sessionCache.findByTokenHash(hash).orElseGet(() ->
-                sessions.findByTokenHash(hash)
-                        .map(s -> { sessionCache.put(s); return s; })
-                        .orElseThrow(() -> ServiceException.unauth("Invalid refresh token")));
+        Session session = sessions.findByTokenHash(hash)
+                .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
 
         // Sanity: the session should belong to the user in the JWT.
         if (!session.getUserId().equals(uid) || !session.getId().equals(sid))
@@ -202,16 +196,10 @@ public class AuthDomainService {
         String newAccess  = jwt.issueAccess(c, session.getId());
         String newRefresh = jwt.issueRefresh(c, session.getId(), cookieAge);
 
-        // 2. Evict old cache entry before overwriting the hash.
-        sessionCache.evict(hash);
-
-        // 3. Rotate: update the hash in DB and slide the expiry window.
+        // Rotate: update the hash in DB and slide the expiry window.
         session.setTokenHash(refreshHasher.hash(newRefresh));
         session.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusSeconds(cookieAge));
         sessions.save(session);
-
-        // 4. Write new entry to cache.
-        sessionCache.put(session);
 
         return new LoginResult(c, newAccess, newRefresh, cookieAge, session.getId());
     }
@@ -229,16 +217,10 @@ public class AuthDomainService {
     @Transactional
     public void logout(long sessionId, String refreshToken) {
         if (sessionId > 0) {
-            sessions.findById(sessionId).ifPresent(s -> {
-                sessionCache.evict(s.getTokenHash());
-                sessions.delete(s);
-            });
+            sessions.findById(sessionId).ifPresent(sessions::delete);
         } else if (refreshToken != null && !refreshToken.isBlank()) {
             String hash = refreshHasher.hash(refreshToken);
-            sessions.findByTokenHash(hash).ifPresent(s -> {
-                sessionCache.evict(hash);
-                sessions.delete(s);
-            });
+            sessions.findByTokenHash(hash).ifPresent(sessions::delete);
         }
     }
 
@@ -325,11 +307,7 @@ public class AuthDomainService {
      * Called on logout-all, password reset, and password change.
      */
     private void revokeAllSessions(long userId) {
-        List<Session> all = sessions.findAllByUserId(userId);
-        if (!all.isEmpty()) {
-            sessionCache.evictAll(all.stream().map(Session::getTokenHash).toList());
-            sessions.deleteAllByUserId(userId);
-        }
+        sessions.deleteAllByUserId(userId);
     }
 
     private static void clearResetCode(Credential c) {
