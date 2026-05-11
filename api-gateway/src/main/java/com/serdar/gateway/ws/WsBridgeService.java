@@ -79,6 +79,16 @@ public class WsBridgeService {
             ctx.cancel(null);
             log.debug("WS bridge unsubscribed session {}", sessionId);
         }
+        // Remove cached presence snapshot so disconnected users don't accumulate
+        // entries indefinitely in the lastSnapshot map. The principal name is the
+        // userId string set by StompPrincipalHandshakeHandler during the WS handshake.
+        if (event.getUser() != null) {
+            try {
+                long userId = Long.parseLong(event.getUser().getName());
+                lastSnapshot.remove(userId);
+                log.debug("Cleared lastSnapshot for user {} (session {})", userId, sessionId);
+            } catch (NumberFormatException ignored) {}
+        }
     }
 
     /** Re-send the cached presence snapshot to the user, if we have one. */

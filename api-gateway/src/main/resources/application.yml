@@ -12,6 +12,18 @@ spring:
     multipart:
       max-file-size: ${MAX_UPLOAD_SIZE}
       max-request-size: ${MAX_UPLOAD_SIZE}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
+      # Lettuce connection pool — keep a small pool so rate-limit Lua scripts
+      # don't queue behind each other under burst traffic.
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 1
 
 app:
   environment: ${APP_ENV}

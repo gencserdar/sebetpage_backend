@@ -52,7 +52,7 @@ public class ChatDomainService {
                 .senderId(senderId)
                 .contentCipherB64(enc.cipherB64())
                 .contentIvB64(enc.ivB64())
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build());
 
         broadcastMessage(c, m, plaintext);
@@ -110,7 +110,7 @@ public class ChatDomainService {
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         ConversationParticipant me = participants.findByConversationIdAndUserId(conversationId, readerId)
                 .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         me.setLastReadAt(now);
         participants.save(me);
 

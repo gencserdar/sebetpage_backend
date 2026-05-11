@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Business logic for auth flows — register, login, activate, refresh, etc.
@@ -56,8 +57,21 @@ public class AuthDomainService {
         if (accountChangeCodeMaxAttempts <= 0) throw new IllegalStateException("app.account-change-code-max-attempts must be positive");
     }
 
+    // RFC-5322-lite: local@domain.tld — rejects obvious garbage without being
+    // overly strict. Real delivery failure is caught by the SMTP bounce path.
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$");
+
+    private static void validateEmailFormat(String emailAddr) {
+        if (emailAddr == null || emailAddr.isBlank() || emailAddr.length() > 254
+                || !EMAIL_PATTERN.matcher(emailAddr).matches()) {
+            throw ServiceException.invalid("Invalid email address");
+        }
+    }
+
     @Transactional
     public Registered register(String emailAddr, String rawPassword, String nickname) {
+        validateEmailFormat(emailAddr);
         if (repo.existsByEmail(emailAddr))      throw ServiceException.conflict("Email already used");
         if (repo.existsByNickname(nickname))    throw ServiceException.conflict("Nickname already used");
         PasswordPolicy.validate(rawPassword);
@@ -288,6 +302,7 @@ public class AuthDomainService {
 
     @Transactional
     public boolean changePassword(long userId, String current, String next) {
+        PasswordPolicy.validate(next);
         Credential c = repo.findById(userId).orElseThrow(() -> ServiceException.notFound("User not found"));
         if (!encoder.matches(current, c.getPassword()))
             throw ServiceException.unauth("Current password incorrect");

@@ -60,14 +60,22 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest req, HttpServletResponse resp) {
+        // Always clear the cookies — the user is signed out client-side regardless.
+        //
+        // DB invalidation: use the authenticated principal when present (normal
+        // path — user still has a valid access token). If the access token has
+        // already expired the SecurityContext is empty; we still clear the cookie
+        // and the stored refresh token expires on its own TTL.
+        //
+        // We intentionally do NOT call auth.refresh() here. Doing so would rotate
+        // the token before revoking it — wasteful, and it fails silently when the
+        // refresh token is invalid, leaving the DB row un-nulled.
         try {
-            Optional<String> rt = readRefreshCookie(req);
-            if (rt.isPresent()) {
-                auth.logout(auth.refresh(rt.get()).getUserId());
-            } else {
-                auth.logout(CurrentUser.require().id());
-            }
-        } catch (Exception ignored) {}
+            auth.logout(CurrentUser.require().id());
+        } catch (Exception ignored) {
+            // No valid access token in SecurityContext (already expired or missing).
+            // Cookie cleared below; refresh token expires on its own TTL.
+        }
         ResponseCookie clear = ResponseCookie.from("refreshToken", "")
                 .httpOnly(true).secure("prod".equals(env)).sameSite("Lax").path("/").maxAge(0).build();
         resp.addHeader(HttpHeaders.SET_COOKIE, clear.toString());
