@@ -27,8 +27,11 @@ public class AuthClient {
         return stub.refresh(RefreshRequest.newBuilder().setRefreshToken(refreshToken).build());
     }
 
-    public void logout(long sessionId) {
-        stub.logout(LogoutRequest.newBuilder().setSessionId(sessionId).build());
+    public void logout(long sessionId, String refreshToken) {
+        stub.logout(LogoutRequest.newBuilder()
+                .setSessionId(sessionId)
+                .setRefreshToken(refreshToken != null ? refreshToken : "")
+                .build());
     }
 
     public void logoutAll(long userId) {

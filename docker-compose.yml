@@ -115,10 +115,12 @@ services:
     depends_on:
       auth-db: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
+      redis: { condition: service_healthy }
     env_file:
       - .env
     environment:
       DB_URL: jdbc:mysql://auth-db:3306/auth_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      REDIS_HOST: redis
       RABBITMQ_HOST: rabbitmq
       # auth-service config keys are RABBITMQ_USERNAME / RABBITMQ_PASSWORD
       # (Spring's spring.rabbitmq.username/password). The .env names are

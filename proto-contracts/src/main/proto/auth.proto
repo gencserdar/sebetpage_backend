@@ -96,9 +96,15 @@ message RefreshRequest {
   string refresh_token = 1;
 }
 
-// Invalidate a single session by its ID (embedded in the JWT as "sid" claim).
+// Invalidate a single session.
+// Primary path  : session_id from the "sid" claim in the access token.
+// Fallback path : refresh_token from the HttpOnly cookie — used when the
+//                 access token has already expired at the time of logout.
+// The service uses session_id if non-zero, otherwise falls back to the
+// refresh_token hash. At least one field must be present.
 message LogoutRequest {
-  int64 session_id = 1;
+  int64  session_id    = 1;
+  string refresh_token = 2;
 }
 
 // Invalidate every session owned by a user — "logout from all devices".

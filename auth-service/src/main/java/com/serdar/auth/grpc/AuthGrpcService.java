@@ -76,7 +76,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     @Override
     public void logout(LogoutRequest req, StreamObserver<Empty> out) {
         guard(out, () -> {
-            svc.logout(req.getSessionId());
+            svc.logout(req.getSessionId(), req.getRefreshToken());
             out.onNext(Empty.getDefaultInstance()); out.onCompleted();
         });
     }

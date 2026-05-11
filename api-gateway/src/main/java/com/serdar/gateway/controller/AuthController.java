@@ -62,18 +62,25 @@ public class AuthController {
     public ResponseEntity<?> logout(HttpServletRequest req, HttpServletResponse resp) {
         // Always clear the cookie — the user is signed out client-side regardless.
         //
-        // Session invalidation: use the session id embedded in the access token
-        // (extracted by JwtAuthFilter into AuthenticatedUser.sessionId). This
-        // deletes exactly one session row — the current device — leaving other
-        // devices signed in.
+        // Session invalidation has two paths:
+        //   Primary  : session id from the access token "sid" claim (normal flow).
+        //   Fallback : raw refresh token from the HttpOnly cookie — used when the
+        //              1-minute access token has already expired at logout time.
+        //              Auth-service hashes it and finds the session by hash.
         //
-        // If the access token has already expired the SecurityContext is empty;
-        // we still clear the cookie and the session expires on its own TTL.
-        try {
-            auth.logout(CurrentUser.require().sessionId());
-        } catch (Exception ignored) {
-            // Access token expired or missing — cookie cleared below.
+        // Passing both means auth-service can always identify the session, even
+        // if the access token just expired between the last refresh and logout.
+        long sessionId = 0;
+        try { sessionId = CurrentUser.require().sessionId(); } catch (Exception ignored) {}
+
+        String refreshToken = readRefreshCookie(req).orElse("");
+
+        if (sessionId > 0 || !refreshToken.isBlank()) {
+            try {
+                auth.logout(sessionId, refreshToken);
+            } catch (Exception ignored) {}
         }
+
         clearRefreshCookie(resp);
         clearLegacyAccessCookie(resp);
         return ResponseEntity.ok("Logged out");

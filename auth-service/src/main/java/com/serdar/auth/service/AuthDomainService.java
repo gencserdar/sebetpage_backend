@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -51,6 +52,7 @@ public class AuthDomainService {
 
     private final CredentialRepository repo;
     private final SessionRepository    sessions;
+    private final SessionCacheService  sessionCache;
     private final PasswordEncoder      encoder;
     private final JwtIssuer            jwt;
     private final EmailService         email;
@@ -143,6 +145,7 @@ public class AuthDomainService {
         String refresh = jwt.issueRefresh(c, session.getId(), cookieAge);
         session.setTokenHash(refreshHasher.hash(refresh));
         sessions.save(session);
+        sessionCache.put(session);
 
         return new LoginResult(c, access, refresh, cookieAge, session.getId());
     }
@@ -184,8 +187,12 @@ public class AuthDomainService {
                 .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
 
         String hash = refreshHasher.hash(refreshToken);
-        Session session = sessions.findByTokenHash(hash)
-                .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
+
+        // 1. Try Redis first; on miss fall back to DB and populate cache.
+        Session session = sessionCache.findByTokenHash(hash).orElseGet(() ->
+                sessions.findByTokenHash(hash)
+                        .map(s -> { sessionCache.put(s); return s; })
+                        .orElseThrow(() -> ServiceException.unauth("Invalid refresh token")));
 
         // Sanity: the session should belong to the user in the JWT.
         if (!session.getUserId().equals(uid) || !session.getId().equals(sid))
@@ -195,24 +202,50 @@ public class AuthDomainService {
         String newAccess  = jwt.issueAccess(c, session.getId());
         String newRefresh = jwt.issueRefresh(c, session.getId(), cookieAge);
 
-        // Rotate: update the hash and slide the expiry window.
+        // 2. Evict old cache entry before overwriting the hash.
+        sessionCache.evict(hash);
+
+        // 3. Rotate: update the hash in DB and slide the expiry window.
         session.setTokenHash(refreshHasher.hash(newRefresh));
         session.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusSeconds(cookieAge));
         sessions.save(session);
 
+        // 4. Write new entry to cache.
+        sessionCache.put(session);
+
         return new LoginResult(c, newAccess, newRefresh, cookieAge, session.getId());
     }
 
-    /** Invalidate a single session (one device logout). */
+    /**
+     * Invalidate a single session (one device logout).
+     *
+     * Primary path: sessionId > 0 — comes from the "sid" claim in the access
+     * token. This is the normal case when the access token is still valid.
+     *
+     * Fallback path: sessionId == 0 but refreshToken is provided — used when
+     * the 1-minute access token has already expired at logout time. We hash the
+     * raw refresh JWT and look the session up by hash instead.
+     */
     @Transactional
-    public void logout(long sessionId) {
-        sessions.deleteById(sessionId);
+    public void logout(long sessionId, String refreshToken) {
+        if (sessionId > 0) {
+            sessions.findById(sessionId).ifPresent(s -> {
+                sessionCache.evict(s.getTokenHash());
+                sessions.delete(s);
+            });
+        } else if (refreshToken != null && !refreshToken.isBlank()) {
+            String hash = refreshHasher.hash(refreshToken);
+            sessions.findByTokenHash(hash).ifPresent(s -> {
+                sessionCache.evict(hash);
+                sessions.delete(s);
+            });
+        }
     }
 
     /** Invalidate all sessions for a user (logout from all devices). */
     @Transactional
     public void logoutAll(long userId) {
-        sessions.deleteAllByUserId(userId);
+        revokeAllSessions(userId);
     }
 
     @Transactional
@@ -282,9 +315,21 @@ public class AuthDomainService {
             clearResetCode(c);
             repo.save(c);
             // Revoke all sessions — a password reset is a security event.
-            sessions.deleteAllByUserId(c.getId());
+            revokeAllSessions(c.getId());
             return true;
         }).orElse(false);
+    }
+
+    /**
+     * Shared helper: evict all sessions for a user from both Redis and DB.
+     * Called on logout-all, password reset, and password change.
+     */
+    private void revokeAllSessions(long userId) {
+        List<Session> all = sessions.findAllByUserId(userId);
+        if (!all.isEmpty()) {
+            sessionCache.evictAll(all.stream().map(Session::getTokenHash).toList());
+            sessions.deleteAllByUserId(userId);
+        }
     }
 
     private static void clearResetCode(Credential c) {
@@ -340,7 +385,7 @@ public class AuthDomainService {
         c.setPassword(encoder.encode(next));
         repo.save(c);
         // Revoke all sessions — changing the password is a security event.
-        sessions.deleteAllByUserId(userId);
+        revokeAllSessions(userId);
         return true;
     }
 

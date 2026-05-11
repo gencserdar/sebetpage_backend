@@ -6,11 +6,14 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface SessionRepository extends JpaRepository<Session, Long> {
 
     Optional<Session> findByTokenHash(String tokenHash);
+
+    List<Session> findAllByUserId(Long userId);
 
     /**
      * Bulk-delete all sessions for a user — used by logout-all and password reset/change.
