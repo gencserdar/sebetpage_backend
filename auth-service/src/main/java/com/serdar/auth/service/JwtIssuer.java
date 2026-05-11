@@ -31,15 +31,21 @@ public class JwtIssuer {
 
     public SecretKey key() { return key; }
 
-    public String issueAccess(Credential c) {
+    /**
+     * @param sessionId  the sessions.id for the active session — embedded as
+     *                   the "sid" claim so the gateway can route single-device
+     *                   logout without a separate cookie or DB lookup.
+     */
+    public String issueAccess(Credential c, long sessionId) {
         return JwtTokens.issue(key, c.getEmail(),
-                Map.of("role", c.getRole().name(), "uid", c.getId()),
+                Map.of("role", c.getRole().name(), "uid", c.getId(), "sid", sessionId),
                 accessTtlMs);
     }
 
-    public String issueRefresh(Credential c, int cookieAgeSeconds) {
+    public String issueRefresh(Credential c, long sessionId, int cookieAgeSeconds) {
         return JwtTokens.issue(key, c.getEmail(),
-                Map.of("role", c.getRole().name(), "uid", c.getId(), "type", "refresh"),
+                Map.of("role", c.getRole().name(), "uid", c.getId(),
+                        "sid", sessionId, "type", "refresh"),
                 cookieAgeSeconds * 1000L);
     }
 

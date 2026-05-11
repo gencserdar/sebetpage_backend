@@ -54,21 +54,6 @@ public class Credential {
     @Column(name = "reset_code_attempts")
     private Integer resetCodeAttempts;
 
-    @Column(name = "refresh_token", length = 1024)
-    private String refreshToken;
-
-    /**
-     * Sticky flag captured at login time; used on refresh to decide which TTL
-     * to apply to the newly-rotated refresh token. Sliding-window style:
-     * each successful refresh resets the session to its original window.
-     *
-     * columnDefinition pins a DB-side default so ddl-auto=update can ADD this
-     * column against an existing populated `credentials` table without blowing up.
-     */
-    @Column(name = "remember_me", columnDefinition = "boolean not null default false")
-    @Builder.Default
-    private Boolean rememberMe = false;
-
     /*
      * Pending email-change. The new email and a 6-digit code sit here until
      * the user types the code back; bad attempts increment the counter, and

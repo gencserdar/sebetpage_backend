@@ -60,27 +60,33 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest req, HttpServletResponse resp) {
-        // Always clear the cookies — the user is signed out client-side regardless.
+        // Always clear the cookie — the user is signed out client-side regardless.
         //
-        // DB invalidation: use the authenticated principal when present (normal
-        // path — user still has a valid access token). If the access token has
-        // already expired the SecurityContext is empty; we still clear the cookie
-        // and the stored refresh token expires on its own TTL.
+        // Session invalidation: use the session id embedded in the access token
+        // (extracted by JwtAuthFilter into AuthenticatedUser.sessionId). This
+        // deletes exactly one session row — the current device — leaving other
+        // devices signed in.
         //
-        // We intentionally do NOT call auth.refresh() here. Doing so would rotate
-        // the token before revoking it — wasteful, and it fails silently when the
-        // refresh token is invalid, leaving the DB row un-nulled.
+        // If the access token has already expired the SecurityContext is empty;
+        // we still clear the cookie and the session expires on its own TTL.
         try {
-            auth.logout(CurrentUser.require().id());
+            auth.logout(CurrentUser.require().sessionId());
         } catch (Exception ignored) {
-            // No valid access token in SecurityContext (already expired or missing).
-            // Cookie cleared below; refresh token expires on its own TTL.
+            // Access token expired or missing — cookie cleared below.
         }
-        ResponseCookie clear = ResponseCookie.from("refreshToken", "")
-                .httpOnly(true).secure("prod".equals(env)).sameSite("Lax").path("/").maxAge(0).build();
-        resp.addHeader(HttpHeaders.SET_COOKIE, clear.toString());
+        clearRefreshCookie(resp);
         clearLegacyAccessCookie(resp);
         return ResponseEntity.ok("Logged out");
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<?> logoutAll(HttpServletResponse resp) {
+        // Revoke every session the user has — "sign out from all devices".
+        // Requires a valid access token (user must be authenticated).
+        auth.logoutAll(CurrentUser.require().id());
+        clearRefreshCookie(resp);
+        clearLegacyAccessCookie(resp);
+        return ResponseEntity.ok("Logged out from all devices");
     }
 
     @GetMapping("/activate")
@@ -104,6 +110,12 @@ public class AuthController {
     }
 
     // --- cookie helpers -----------------------------------------------------
+
+    private void clearRefreshCookie(HttpServletResponse resp) {
+        ResponseCookie c = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true).secure("prod".equals(env)).sameSite("Lax").path("/").maxAge(0).build();
+        resp.addHeader(HttpHeaders.SET_COOKIE, c.toString());
+    }
 
     private void writeRefreshCookie(HttpServletResponse resp, String token, int maxAge) {
         // Use ResponseCookie so we can explicitly set SameSite — the classic

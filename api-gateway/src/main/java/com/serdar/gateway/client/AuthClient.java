@@ -27,8 +27,12 @@ public class AuthClient {
         return stub.refresh(RefreshRequest.newBuilder().setRefreshToken(refreshToken).build());
     }
 
-    public void logout(long userId) {
-        stub.logout(LogoutRequest.newBuilder().setUserId(userId).build());
+    public void logout(long sessionId) {
+        stub.logout(LogoutRequest.newBuilder().setSessionId(sessionId).build());
+    }
+
+    public void logoutAll(long userId) {
+        stub.logoutAll(LogoutAllRequest.newBuilder().setUserId(userId).build());
     }
 
     public boolean activate(String code) {

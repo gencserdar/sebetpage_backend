@@ -10,7 +10,6 @@ public interface CredentialRepository extends JpaRepository<Credential, Long> {
     Optional<Credential> findByNickname(String nickname);
     Optional<Credential> findByActivationCode(String code);
     Optional<Credential> findByResetCode(String code);
-    Optional<Credential> findByRefreshToken(String token);
     boolean existsByEmail(String email);
     boolean existsByNickname(String nickname);
 }

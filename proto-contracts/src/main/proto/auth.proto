@@ -7,13 +7,18 @@ option java_package = "com.serdar.proto.auth";
 import "common.proto";
 
 // Auth-service owns credentials: id, email, nickname, password, role, activation,
-// refresh token, reset code. All other user fields (name, surname, profile image)
-// live in user-service.
+// reset code. Refresh tokens are tracked in the `sessions` table (one row per
+// active device/browser), keyed by session_id which is embedded in the JWTs.
 service AuthService {
   rpc Register         (RegisterRequest)        returns (RegisterResponse);
   rpc Login            (LoginRequest)           returns (AuthResponse);
   rpc Refresh          (RefreshRequest)         returns (AuthResponse);
+
+  // Logout this specific session (single device).
   rpc Logout           (LogoutRequest)          returns (com.serdar.proto.common.Empty);
+  // Logout all sessions for a user (all devices).
+  rpc LogoutAll        (LogoutAllRequest)       returns (com.serdar.proto.common.Empty);
+
   rpc Activate         (ActivateRequest)        returns (com.serdar.proto.common.BoolResponse);
   rpc ForgotPassword   (ForgotPasswordRequest)  returns (com.serdar.proto.common.Empty);
   rpc ResetPassword    (ResetPasswordRequest)   returns (com.serdar.proto.common.BoolResponse);
@@ -36,10 +41,6 @@ service AuthService {
   rpc UpdateNickname   (UpdateNicknameRequest)  returns (com.serdar.proto.common.BoolResponse);
 
   // Two-step email/password change with email-delivered 6-digit codes.
-  // Request* generates and emails a code, storing the pending payload on the
-  // credential row. Confirm* validates the code and applies the change.
-  // Codes expire after a fixed window and tolerate a small number of bad
-  // attempts before invalidating to defeat brute-forcing.
   rpc RequestEmailChange    (RequestEmailChangeRequest)    returns (com.serdar.proto.common.Empty);
   rpc ConfirmEmailChange    (ConfirmCodeRequest)           returns (ConfirmEmailChangeResponse);
   rpc RequestPasswordChange (RequestPasswordChangeRequest) returns (com.serdar.proto.common.Empty);
@@ -72,7 +73,7 @@ message RegisterResponse {
   int64  user_id = 1;
   string email = 2;
   string nickname = 3;
-  string activation_code = 4; // returned so user-service or mailer can use it
+  string activation_code = 4;
 }
 
 message LoginRequest {
@@ -95,7 +96,13 @@ message RefreshRequest {
   string refresh_token = 1;
 }
 
+// Invalidate a single session by its ID (embedded in the JWT as "sid" claim).
 message LogoutRequest {
+  int64 session_id = 1;
+}
+
+// Invalidate every session owned by a user — "logout from all devices".
+message LogoutAllRequest {
   int64 user_id = 1;
 }
 
@@ -128,6 +135,7 @@ message ValidateTokenResponse {
   string email = 3;
   string nickname = 4;
   Role   role = 5;
+  int64  session_id = 6; // active session — used by gateway for targeted logout
 }
 
 message UpdateEmailRequest {
@@ -158,5 +166,5 @@ message ConfirmCodeRequest {
 
 message ConfirmEmailChangeResponse {
   bool   ok = 1;
-  string new_email = 2; // empty when ok=false
+  string new_email = 2;
 }

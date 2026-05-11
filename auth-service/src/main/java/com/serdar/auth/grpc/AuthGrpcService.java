@@ -76,7 +76,15 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     @Override
     public void logout(LogoutRequest req, StreamObserver<Empty> out) {
         guard(out, () -> {
-            svc.logout(req.getUserId());
+            svc.logout(req.getSessionId());
+            out.onNext(Empty.getDefaultInstance()); out.onCompleted();
+        });
+    }
+
+    @Override
+    public void logoutAll(LogoutAllRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.logoutAll(req.getUserId());
             out.onNext(Empty.getDefaultInstance()); out.onCompleted();
         });
     }
@@ -121,7 +129,8 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
             b.setUserId(v.userId())
                     .setEmail(v.emailAddr())
                     .setNickname(v.nickname())
-                    .setRole(toProto(v.role()));
+                    .setRole(toProto(v.role()))
+                    .setSessionId(v.sessionId());
         }
         out.onNext(b.build()); out.onCompleted();
     }

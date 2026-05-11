@@ -2,7 +2,9 @@ package com.serdar.auth.service;
 
 import com.serdar.auth.entity.Credential;
 import com.serdar.auth.entity.Role;
+import com.serdar.auth.entity.Session;
 import com.serdar.auth.repository.CredentialRepository;
+import com.serdar.auth.repository.SessionRepository;
 import com.serdar.common.ServiceException;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PostConstruct;
@@ -13,11 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -25,25 +28,40 @@ import java.util.regex.Pattern;
 /**
  * Business logic for auth flows — register, login, activate, refresh, etc.
  * The gRPC layer ({@link com.serdar.auth.grpc.AuthGrpcService}) is a thin
- * adapter over this class, so it can also be reused from tests without spinning
- * up a gRPC server.
+ * adapter over this class.
+ *
+ * Session model
+ * -------------
+ * Each login creates one row in the `sessions` table. The row carries:
+ *   - HMAC-SHA-256 hash of the refresh JWT (never store plaintext)
+ *   - rememberMe flag (determines cookie TTL on every refresh rotation)
+ *   - expires_at  (mirrors JWT expiry; useful for cleanup jobs)
+ *
+ * The session's PK is embedded as the "sid" claim in both the access token and
+ * the refresh token. This lets the gateway route a single-device logout by
+ * passing only the session id — no extra cookie required.
+ *
+ * Validate does NOT check whether the session row still exists. Access tokens
+ * are short-lived (1 min), so the worst-case window after a logout is trivially
+ * small and avoids an extra DB hit on every authenticated request.
  */
 @Service
 @RequiredArgsConstructor
 public class AuthDomainService {
 
     private final CredentialRepository repo;
-    private final PasswordEncoder encoder;
-    private final JwtIssuer jwt;
-    private final EmailService email;
-    private final RefreshTokenHasher refreshHasher;
+    private final SessionRepository    sessions;
+    private final PasswordEncoder      encoder;
+    private final JwtIssuer            jwt;
+    private final EmailService         email;
+    private final RefreshTokenHasher   refreshHasher;
 
     @Value("${refresh.expiration.default}")  int refreshDefault;
     @Value("${refresh.expiration.remember}") int refreshRemember;
     @Value("${frontend.base-url}") String frontendBaseUrl;
     @Value("${gateway.base-url}")  String gatewayBaseUrl;
-    @Value("${app.reset-code-ttl-minutes}") int resetCodeTtlMinutes;
-    @Value("${app.reset-code-max-attempts}") int resetCodeMaxAttempts;
+    @Value("${app.reset-code-ttl-minutes}")        int resetCodeTtlMinutes;
+    @Value("${app.reset-code-max-attempts}")        int resetCodeMaxAttempts;
     @Value("${app.account-change-code-ttl-minutes}") int accountChangeCodeTtlMinutes;
     @Value("${app.account-change-code-max-attempts}") int accountChangeCodeMaxAttempts;
 
@@ -51,9 +69,9 @@ public class AuthDomainService {
 
     @PostConstruct
     void validateSecurityConfig() {
-        if (resetCodeTtlMinutes <= 0) throw new IllegalStateException("app.reset-code-ttl-minutes must be positive");
-        if (resetCodeMaxAttempts <= 0) throw new IllegalStateException("app.reset-code-max-attempts must be positive");
-        if (accountChangeCodeTtlMinutes <= 0) throw new IllegalStateException("app.account-change-code-ttl-minutes must be positive");
+        if (resetCodeTtlMinutes <= 0)          throw new IllegalStateException("app.reset-code-ttl-minutes must be positive");
+        if (resetCodeMaxAttempts <= 0)         throw new IllegalStateException("app.reset-code-max-attempts must be positive");
+        if (accountChangeCodeTtlMinutes <= 0)  throw new IllegalStateException("app.account-change-code-ttl-minutes must be positive");
         if (accountChangeCodeMaxAttempts <= 0) throw new IllegalStateException("app.account-change-code-max-attempts must be positive");
     }
 
@@ -72,12 +90,11 @@ public class AuthDomainService {
     @Transactional
     public Registered register(String emailAddr, String rawPassword, String nickname) {
         validateEmailFormat(emailAddr);
-        if (repo.existsByEmail(emailAddr))      throw ServiceException.conflict("Email already used");
-        if (repo.existsByNickname(nickname))    throw ServiceException.conflict("Nickname already used");
+        if (repo.existsByEmail(emailAddr))   throw ServiceException.conflict("Email already used");
+        if (repo.existsByNickname(nickname)) throw ServiceException.conflict("Nickname already used");
         PasswordPolicy.validate(rawPassword);
 
         String activationCode = UUID.randomUUID().toString();
-
         Credential c = Credential.builder()
                 .email(emailAddr)
                 .nickname(nickname)
@@ -89,11 +106,15 @@ public class AuthDomainService {
         repo.save(c);
 
         String link = gatewayBaseUrl + "/api/auth/activate?code=" + activationCode;
-        email.send(emailAddr, "Activate your account", "Please click this link to activate: " + link);
+        email.send(emailAddr, "Activate your account",
+                "Please click this link to activate: " + link);
         return new Registered(c, activationCode);
     }
 
-    public record LoginResult(Credential credential, String accessToken, String refreshToken, int cookieAge) {}
+    // LoginResult now carries the session id so the gRPC layer can include it
+    // in the AuthResponse (the gateway embeds it in AuthenticatedUser).
+    public record LoginResult(Credential credential, String accessToken,
+                              String refreshToken, int cookieAge, long sessionId) {}
 
     @Transactional
     public LoginResult login(String emailAddr, String rawPassword, boolean rememberMe) {
@@ -105,42 +126,47 @@ public class AuthDomainService {
             throw ServiceException.precondition("Account is not activated. Check your email.");
 
         int cookieAge = rememberMe ? refreshRemember : refreshDefault;
-        String access = jwt.issueAccess(c);
-        String refresh = jwt.issueRefresh(c, cookieAge);
-        // Refresh-token-at-rest is HMAC-SHA-256, not bcrypt. The token is a
-        // 256-bit random JWT — bcrypt's anti-brute-force slowness adds zero
-        // value here and burns ~200ms of CPU per login. See RefreshTokenHasher
-        // for the rationale.
-        c.setRefreshToken(refreshHasher.hash(refresh));
-        c.setRememberMe(rememberMe);
-        repo.save(c);
-        // The plaintext refresh JWT goes back to the client (HttpOnly cookie);
-        // the DB only ever sees the HMAC hash.
-        return new LoginResult(c, access, refresh, cookieAge);
+
+        // Create the session row first so we have its PK to embed in the JWTs.
+        // We do a two-phase write: save a placeholder session, get the id, then
+        // issue tokens with that id, then update the session with the token hash.
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        Session session = sessions.save(Session.builder()
+                .userId(c.getId())
+                .tokenHash("__pending__")          // overwritten below
+                .rememberMe(rememberMe)
+                .expiresAt(now.plusSeconds(cookieAge))
+                .createdAt(now)
+                .build());
+
+        String access  = jwt.issueAccess(c, session.getId());
+        String refresh = jwt.issueRefresh(c, session.getId(), cookieAge);
+        session.setTokenHash(refreshHasher.hash(refresh));
+        sessions.save(session);
+
+        return new LoginResult(c, access, refresh, cookieAge, session.getId());
     }
 
     /**
-     * Rotate the refresh token on every refresh (best practice — a leaked
-     * token is only usable until the legitimate user refreshes next, at which
-     * point the stolen one stops matching the DB row). The new refresh token
-     * is issued with the same window the user originally chose (remember-me
-     * vs. default), so the total session is sliding: staying active keeps you
-     * signed in; two days/30 days of silence logs you out.
+     * Rotates the refresh token for the session identified by the hashed token.
      *
-     * Implementation note: refresh tokens are stored as HMAC-SHA-256 hashes
-     * (legacy rows may still be in bcrypt format — RefreshTokenHasher.matches
-     * accepts both during the migration window). We parse the JWT first
-     * (signature-verifies that the token came from us), pull the uid out
-     * of its claims, then verify the submitted token against the stored hash.
+     * Flow:
+     *   1. Parse + verify the JWT signature (throws if expired / tampered).
+     *   2. Locate the session row by the token hash.
+     *   3. Issue a new access + refresh pair with the same session id.
+     *   4. Overwrite the session's hash and slide the expiry window.
+     *
+     * Detecting token reuse (refresh token rotation):
+     *   If a valid-signature refresh JWT doesn't match any session row (hash
+     *   lookup returns empty), the token was either already rotated (replay
+     *   attack) or the session was explicitly revoked. We return UNAUTH — the
+     *   user will be forced to log in again, which is the correct response.
      */
     @Transactional
     public LoginResult refresh(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank())
             throw ServiceException.unauth("No refresh token");
 
-        // jwt.parse throws on invalid signature, expired, malformed — so by
-        // the time we reach the next line we know the token was issued by us
-        // and isn't expired.
         Claims claims;
         try {
             claims = jwt.parse(refreshToken);
@@ -149,35 +175,44 @@ public class AuthDomainService {
         }
         if (!"refresh".equals(claims.get("type", String.class)))
             throw ServiceException.unauth("Invalid refresh token");
+
         Long uid = claims.get("uid", Long.class);
-        if (uid == null) throw ServiceException.unauth("Invalid refresh token");
+        Long sid = claims.get("sid", Long.class);
+        if (uid == null || sid == null) throw ServiceException.unauth("Invalid refresh token");
 
         Credential c = repo.findById(uid)
                 .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
 
-        // Token must match the stored hash. RefreshTokenHasher accepts both
-        // HMAC (new format) and bcrypt (legacy rows from before the migration)
-        // so existing sessions keep working through one rotation cycle.
-        if (c.getRefreshToken() == null
-                || !refreshHasher.matches(refreshToken, c.getRefreshToken())) {
-            throw ServiceException.unauth("Invalid refresh token");
-        }
+        String hash = refreshHasher.hash(refreshToken);
+        Session session = sessions.findByTokenHash(hash)
+                .orElseThrow(() -> ServiceException.unauth("Invalid refresh token"));
 
-        int cookieAge = Boolean.TRUE.equals(c.getRememberMe()) ? refreshRemember : refreshDefault;
-        String newAccess  = jwt.issueAccess(c);
-        String newRefresh = jwt.issueRefresh(c, cookieAge);
-        // Always rotate AND always rewrite as HMAC — this is the path that
-        // drains legacy bcrypt rows out of the DB without any explicit
-        // migration job: every active session moves to HMAC on its next
-        // refresh, dormant sessions drop off naturally when they expire.
-        c.setRefreshToken(refreshHasher.hash(newRefresh));
-        repo.save(c);
-        return new LoginResult(c, newAccess, newRefresh, cookieAge);
+        // Sanity: the session should belong to the user in the JWT.
+        if (!session.getUserId().equals(uid) || !session.getId().equals(sid))
+            throw ServiceException.unauth("Invalid refresh token");
+
+        int cookieAge = Boolean.TRUE.equals(session.getRememberMe()) ? refreshRemember : refreshDefault;
+        String newAccess  = jwt.issueAccess(c, session.getId());
+        String newRefresh = jwt.issueRefresh(c, session.getId(), cookieAge);
+
+        // Rotate: update the hash and slide the expiry window.
+        session.setTokenHash(refreshHasher.hash(newRefresh));
+        session.setExpiresAt(LocalDateTime.now(ZoneOffset.UTC).plusSeconds(cookieAge));
+        sessions.save(session);
+
+        return new LoginResult(c, newAccess, newRefresh, cookieAge, session.getId());
     }
 
+    /** Invalidate a single session (one device logout). */
     @Transactional
-    public void logout(long userId) {
-        repo.findById(userId).ifPresent(c -> { c.setRefreshToken(null); repo.save(c); });
+    public void logout(long sessionId) {
+        sessions.deleteById(sessionId);
+    }
+
+    /** Invalidate all sessions for a user (logout from all devices). */
+    @Transactional
+    public void logoutAll(long userId) {
+        sessions.deleteAllByUserId(userId);
     }
 
     @Transactional
@@ -193,11 +228,7 @@ public class AuthDomainService {
     @Transactional
     public void forgotPassword(String emailAddr) {
         // Email enumeration protection: don't tell the caller whether the
-        // address is registered. We *silently* no-op for unknown addresses
-        // so an attacker probing /forgot-password gets the same 200 OK
-        // response either way. The only side-channel left is timing
-        // (BCrypt-encoding the reset link path is similar duration to the
-        // missing-account path, so the gap is small).
+        // address is registered — silent no-op for unknown addresses.
         repo.findByEmail(emailAddr).ifPresent(c -> {
             String selector = UUID.randomUUID().toString();
             String verifier = newResetVerifier();
@@ -221,28 +252,25 @@ public class AuthDomainService {
         if (parts == null) return false;
 
         return repo.findByResetCode(parts.selector()).map(c -> {
-            if (c.getResetCodeExpiresAt() == null || c.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
-                clearResetCode(c);
-                repo.save(c);
+            if (c.getResetCodeExpiresAt() == null
+                    || c.getResetCodeExpiresAt().isBefore(LocalDateTime.now())) {
+                clearResetCode(c); repo.save(c);
                 return false;
             }
 
             int attempts = c.getResetCodeAttempts() == null ? 0 : c.getResetCodeAttempts();
             if (attempts >= resetCodeMaxAttempts) {
-                clearResetCode(c);
-                repo.save(c);
+                clearResetCode(c); repo.save(c);
                 return false;
             }
 
             if (c.getResetCodeHash() != null) {
-                String submittedHash = parts.verifier() == null ? null : hashResetVerifier(parts.verifier());
+                String submittedHash = parts.verifier() == null
+                        ? null : hashResetVerifier(parts.verifier());
                 if (!constantTimeEquals(c.getResetCodeHash(), submittedHash)) {
                     attempts++;
-                    if (attempts >= resetCodeMaxAttempts) {
-                        clearResetCode(c);
-                    } else {
-                        c.setResetCodeAttempts(attempts);
-                    }
+                    if (attempts >= resetCodeMaxAttempts) clearResetCode(c);
+                    else c.setResetCodeAttempts(attempts);
                     repo.save(c);
                     return false;
                 }
@@ -251,9 +279,10 @@ public class AuthDomainService {
             }
 
             c.setPassword(encoder.encode(newPassword));
-            c.setRefreshToken(null);
             clearResetCode(c);
             repo.save(c);
+            // Revoke all sessions — a password reset is a security event.
+            sessions.deleteAllByUserId(c.getId());
             return true;
         }).orElse(false);
     }
@@ -271,7 +300,8 @@ public class AuthDomainService {
         if (code == null || code.isBlank()) return null;
         int dot = code.indexOf('.');
         if (dot < 0) return new ResetTokenParts(code, null);
-        if (dot == 0 || dot == code.length() - 1 || code.indexOf('.', dot + 1) >= 0) return null;
+        if (dot == 0 || dot == code.length() - 1
+                || code.indexOf('.', dot + 1) >= 0) return null;
         return new ResetTokenParts(code.substring(0, dot), code.substring(dot + 1));
     }
 
@@ -303,11 +333,14 @@ public class AuthDomainService {
     @Transactional
     public boolean changePassword(long userId, String current, String next) {
         PasswordPolicy.validate(next);
-        Credential c = repo.findById(userId).orElseThrow(() -> ServiceException.notFound("User not found"));
+        Credential c = repo.findById(userId)
+                .orElseThrow(() -> ServiceException.notFound("User not found"));
         if (!encoder.matches(current, c.getPassword()))
             throw ServiceException.unauth("Current password incorrect");
         c.setPassword(encoder.encode(next));
         repo.save(c);
+        // Revoke all sessions — changing the password is a security event.
+        sessions.deleteAllByUserId(userId);
         return true;
     }
 
@@ -343,24 +376,10 @@ public class AuthDomainService {
     }
 
     // --- two-step email / password change ----------------------------------
-    //
-    // The flow:
-    //   1. requestEmailChange / requestPasswordChange — generates a 6-digit
-    //      code, stores the pending payload (new email / hashed new password)
-    //      and a short expiry on the credential row, and emails the code.
-    //   2. confirmEmailChange / confirmPasswordChange — verifies the code,
-    //      applies the change, clears the pending state. Bad attempts count
-    //      up; once they exceed the configured max attempts we wipe the pending state to
-    //      defeat brute force, and the user has to start over.
-    //
-    // Codes are short and high-frequency, so we use SecureRandom and store
-    // them in cleartext. The expiry window keeps the brute-force surface
-    // tiny (short TTL times limited attempts).
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private static String newSixDigitCode() {
-        // Six digits, zero-padded so leading zeros are preserved.
         return String.format("%06d", RANDOM.nextInt(1_000_000));
     }
 
@@ -389,17 +408,14 @@ public class AuthDomainService {
                 "\nIf you didn't request this, ignore this email — your address won't change.");
     }
 
-    /**
-     * Returns the new email on success, null on failure (caller can decide
-     * how to surface bad-code vs expired-code; we throw for those).
-     */
     @Transactional
     public String confirmEmailChange(long userId, String submittedCode) {
         Credential c = byId(userId);
         if (c.getPendingEmailCode() == null || c.getPendingEmailNew() == null)
             throw ServiceException.invalid("No pending email change");
 
-        if (c.getPendingEmailExpiresAt() != null && c.getPendingEmailExpiresAt().isBefore(LocalDateTime.now())) {
+        if (c.getPendingEmailExpiresAt() != null
+                && c.getPendingEmailExpiresAt().isBefore(LocalDateTime.now())) {
             clearPendingEmail(c); repo.save(c);
             throw ServiceException.invalid("Verification code expired");
         }
@@ -416,7 +432,6 @@ public class AuthDomainService {
             throw ServiceException.invalid("Incorrect code");
         }
 
-        // Race: someone else may have grabbed the email between request and confirm.
         if (repo.existsByEmail(c.getPendingEmailNew())) {
             clearPendingEmail(c); repo.save(c);
             throw ServiceException.conflict("Email already used");
@@ -428,8 +443,6 @@ public class AuthDomainService {
         clearPendingEmail(c);
         repo.save(c);
 
-        // Notify the OLD address — fire-and-forget so a flaky SMTP doesn't
-        // block the user-facing response.
         email.send(oldEmail,
                 "Your account email was changed",
                 "The email on your account was just changed to " + newEmail + "." +
@@ -448,7 +461,6 @@ public class AuthDomainService {
     @Transactional
     public void requestPasswordChange(long userId, String currentPassword, String newPassword) {
         PasswordPolicy.validate(newPassword);
-
         Credential c = byId(userId);
         if (!encoder.matches(currentPassword, c.getPassword()))
             throw ServiceException.unauth("Current password incorrect");
@@ -460,13 +472,11 @@ public class AuthDomainService {
         c.setPendingPasswordAttempts(0);
         repo.save(c);
 
-        // Code goes to the *current* address — proves they have account access,
-        // so a stolen session can't pivot into a password reset silently.
         email.send(c.getEmail(),
                 "Confirm your password change",
                 "Your verification code is: " + code +
                 "\n\nThis code expires in " + accountChangeCodeTtlMinutes + " minutes." +
-                "\nIf you didn't request this, change your password immediately — someone may have access to your session.");
+                "\nIf you didn't request this, change your password immediately.");
     }
 
     @Transactional
@@ -475,7 +485,8 @@ public class AuthDomainService {
         if (c.getPendingPasswordCode() == null || c.getPendingPasswordNewHash() == null)
             throw ServiceException.invalid("No pending password change");
 
-        if (c.getPendingPasswordExpiresAt() != null && c.getPendingPasswordExpiresAt().isBefore(LocalDateTime.now())) {
+        if (c.getPendingPasswordExpiresAt() != null
+                && c.getPendingPasswordExpiresAt().isBefore(LocalDateTime.now())) {
             clearPendingPassword(c); repo.save(c);
             throw ServiceException.invalid("Verification code expired");
         }
@@ -505,23 +516,35 @@ public class AuthDomainService {
         c.setPendingPasswordAttempts(null);
     }
 
-    /** Stateless token validation — used by the gateway on every request. */
-    public record ValidationResult(boolean valid, long userId, String emailAddr, String nickname, Role role) {
-        public static ValidationResult invalid() { return new ValidationResult(false, 0, "", "", null); }
+    // --- token validation ---------------------------------------------------
+
+    /**
+     * Stateless validation result. The session_id extracted from the "sid"
+     * claim is forwarded to the gateway so it can target single-device logout
+     * without a separate DB round-trip.
+     */
+    public record ValidationResult(boolean valid, long userId, String emailAddr,
+                                   String nickname, Role role, long sessionId) {
+        public static ValidationResult invalid() {
+            return new ValidationResult(false, 0, "", "", null, 0);
+        }
     }
 
+    /** Stateless token validation — used by the gateway on every request. */
     public ValidationResult validate(String accessToken) {
         try {
             Claims claims = jwt.parse(accessToken);
             if (claims.getExpiration().toInstant().toEpochMilli() < System.currentTimeMillis())
                 return ValidationResult.invalid();
             Long uid = claims.get("uid", Long.class);
-            if (uid == null) return ValidationResult.invalid();
-            if (claims.get("type") != null) return ValidationResult.invalid();
-            // Light DB hit to confirm the user still exists and matches the token's subject.
+            Long sid = claims.get("sid", Long.class);
+            if (uid == null || sid == null)    return ValidationResult.invalid();
+            if (claims.get("type") != null)    return ValidationResult.invalid(); // reject refresh tokens
             Credential c = repo.findById(uid).orElse(null);
-            if (c == null || !c.getEmail().equals(claims.getSubject())) return ValidationResult.invalid();
-            return new ValidationResult(true, c.getId(), c.getEmail(), c.getNickname(), c.getRole());
+            if (c == null || !c.getEmail().equals(claims.getSubject()))
+                return ValidationResult.invalid();
+            return new ValidationResult(true, c.getId(), c.getEmail(),
+                    c.getNickname(), c.getRole(), sid);
         } catch (Exception e) {
             return ValidationResult.invalid();
         }
