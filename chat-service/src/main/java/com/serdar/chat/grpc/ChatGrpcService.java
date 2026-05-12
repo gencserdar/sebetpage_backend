@@ -1,6 +1,7 @@
 package com.serdar.chat.grpc;
 
 import com.serdar.chat.entity.Conversation;
+import com.serdar.chat.entity.ConversationParticipant;
 import com.serdar.chat.entity.Message;
 import com.serdar.chat.service.ChatDomainService;
 import com.serdar.chat.service.ConversationService;
@@ -8,6 +9,7 @@ import com.serdar.chat.service.EventBroker;
 import com.serdar.common.GrpcErrors;
 import com.serdar.common.ServiceException;
 import com.serdar.proto.chat.*;
+import com.serdar.proto.common.Empty;
 import com.serdar.proto.common.IdRequest;
 import io.grpc.Context;
 import io.grpc.stub.ServerCallStreamObserver;
@@ -142,6 +144,81 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     @Override
+    public void removeMessagingGroupMember(RemoveMessagingGroupMemberRequest req, StreamObserver<MessagingGroupDetail> out) {
+        guard(out, () -> {
+            out.onNext(toProto(chat.removeMessagingGroupMember(
+                    req.getConversationId(), req.getRequesterId(), req.getTargetUserId())));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void getMessagingGroupDetail(MessagingGroupDetailRequest req, StreamObserver<MessagingGroupDetail> out) {
+        guard(out, () -> {
+            out.onNext(toProto(chat.messagingGroupDetail(req.getConversationId(), req.getRequesterId())));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void updateMessagingGroup(UpdateMessagingGroupRequest req, StreamObserver<MessagingGroupDetail> out) {
+        guard(out, () -> {
+            out.onNext(toProto(chat.updateMessagingGroup(
+                    req.getConversationId(),
+                    req.getRequesterId(),
+                    req.getUpdateTitle(),
+                    req.getTitle(),
+                    req.getUpdateDescription(),
+                    req.getDescription(),
+                    req.getUpdateImageUrl(),
+                    req.getImageUrl()
+            )));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void updateMessagingGroupParticipant(UpdateMessagingGroupParticipantRequest req, StreamObserver<MessagingGroupDetail> out) {
+        guard(out, () -> {
+            MessagingGroupPermissionSet p = req.getPermissions();
+            out.onNext(toProto(chat.updateMessagingGroupParticipant(
+                    req.getConversationId(),
+                    req.getRequesterId(),
+                    req.getTargetUserId(),
+                    req.getUpdateMuted(),
+                    req.getMuted(),
+                    req.getUpdatePermissions(),
+                    new ChatDomainService.PermissionValues(
+                            p.getCanChangePhoto(),
+                            p.getCanChangeDescription(),
+                            p.getCanChangeName(),
+                            p.getCanRemoveMembers(),
+                            p.getCanAddMembers()
+                    )
+            )));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void exitMessagingGroup(MessagingGroupActionRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            chat.exitMessagingGroup(req.getConversationId(), req.getRequesterId());
+            out.onNext(Empty.newBuilder().build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void deleteMessagingGroup(MessagingGroupActionRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            chat.deleteMessagingGroup(req.getConversationId(), req.getRequesterId());
+            out.onNext(Empty.newBuilder().build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void subscribeEvents(IdRequest req, StreamObserver<ChatEvent> out) {
         long userId = req.getId();
         broker.subscribe(userId, out);
@@ -185,7 +262,34 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
                 .setUserAId(c.getUserAId() == null ? 0 : c.getUserAId())
                 .setUserBId(c.getUserBId() == null ? 0 : c.getUserBId())
                 .setTitle(c.getTitle() == null ? "" : c.getTitle())
+                .setDescription(c.getDescription() == null ? "" : c.getDescription())
+                .setImageUrl(c.getImageUrl() == null ? "" : c.getImageUrl())
+                .setCreatedById(c.getCreatedById() == null ? 0 : c.getCreatedById())
                 .setCreatedAtMillis(c.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli())
+                .build();
+    }
+
+    private static MessagingGroupDetail toProto(ChatDomainService.MessagingGroupDetail detail) {
+        MessagingGroupDetail.Builder b = MessagingGroupDetail.newBuilder()
+                .setConversation(toProto(detail.conversation()))
+                .setMe(toProto(detail.me()));
+        detail.participants().forEach(p -> b.addParticipants(toProto(p)));
+        detail.knownParticipants().forEach(p -> b.addKnownParticipants(toProto(p)));
+        return b.build();
+    }
+
+    private static com.serdar.proto.chat.MessagingGroupParticipant toProto(ConversationParticipant p) {
+        return com.serdar.proto.chat.MessagingGroupParticipant.newBuilder()
+                .setUserId(p.getUserId())
+                .setRole(p.getRole() == null ? "" : p.getRole())
+                .setMuted(Boolean.TRUE.equals(p.getMuted()))
+                .setPermissions(MessagingGroupPermissionSet.newBuilder()
+                        .setCanChangePhoto(Boolean.TRUE.equals(p.getCanChangePhoto()))
+                        .setCanChangeDescription(Boolean.TRUE.equals(p.getCanChangeDescription()))
+                        .setCanChangeName(Boolean.TRUE.equals(p.getCanChangeName()))
+                        .setCanRemoveMembers(Boolean.TRUE.equals(p.getCanRemoveMembers()))
+                        .setCanAddMembers(Boolean.TRUE.equals(p.getCanAddMembers()))
+                        .build())
                 .build();
     }
 

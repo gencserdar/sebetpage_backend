@@ -100,14 +100,17 @@ public class ChatController {
     // --- helpers -----------------------------------------------------------
 
     private static Map<String, Object> toRow(Conversation c) {
-        return Map.of(
-                "id", c.getId(),
-                "type", c.getType().name(),
-                "userAId", c.getUserAId(),
-                "userBId", c.getUserBId(),
-                "title", c.getTitle(),
-                "createdAtMillis", c.getCreatedAtMillis()
-        );
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", c.getId());
+        row.put("type", c.getType().name());
+        row.put("userAId", c.getUserAId());
+        row.put("userBId", c.getUserBId());
+        row.put("title", c.getTitle());
+        row.put("description", c.getDescription());
+        row.put("imageUrl", c.getImageUrl());
+        row.put("createdById", c.getCreatedById());
+        row.put("createdAtMillis", c.getCreatedAtMillis());
+        return row;
     }
 
     private static Map<String, Object> toMessage(ChatMessage m) {

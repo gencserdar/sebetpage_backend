@@ -60,6 +60,11 @@ public class ProfileService {
         return repo.save(p);
     }
 
+    public String uploadImage(long uploaderId, byte[] bytes, String contentType, String filename) {
+        ImageValidator.Validated v = ImageValidator.validate(bytes, uploaderId);
+        return s3.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
+    }
+
     @Transactional
     public UserProfile updateNameSurname(long userId, String name, String surname) {
         UserProfile p = getById(userId);

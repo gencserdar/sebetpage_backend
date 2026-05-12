@@ -82,12 +82,19 @@ public class ConversationService {
         Conversation c = conversations.save(Conversation.builder()
                 .type(Conversation.Type.MESSAGING_GROUP)
                 .title(name != null && !name.isBlank() ? name.trim() : null)
+                .createdById(creatorId)
                 .createdAt(now)
                 .build());
 
         participants.save(ConversationParticipant.builder()
                 .conversationId(c.getId()).userId(creatorId)
-                .joinedAt(now).role("ADMIN").build());
+                .joinedAt(now).role("ADMIN")
+                .canChangePhoto(true)
+                .canChangeDescription(true)
+                .canChangeName(true)
+                .canRemoveMembers(true)
+                .canAddMembers(true)
+                .build());
 
         validMemberIds.forEach(id -> participants.save(ConversationParticipant.builder()
                 .conversationId(c.getId()).userId(id)

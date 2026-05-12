@@ -59,6 +59,77 @@ public class ChatClient {
                 .build());
     }
 
+    public MessagingGroupDetail removeMessagingGroupMember(long conversationId, long requesterId, long targetUserId) {
+        return blocking.removeMessagingGroupMember(RemoveMessagingGroupMemberRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .setTargetUserId(targetUserId)
+                .build());
+    }
+
+    public MessagingGroupDetail messagingGroupDetail(long conversationId, long requesterId) {
+        return blocking.getMessagingGroupDetail(MessagingGroupDetailRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .build());
+    }
+
+    public MessagingGroupDetail updateMessagingGroup(
+            long conversationId,
+            long requesterId,
+            boolean updateTitle,
+            String title,
+            boolean updateDescription,
+            String description,
+            boolean updateImageUrl,
+            String imageUrl
+    ) {
+        return blocking.updateMessagingGroup(UpdateMessagingGroupRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .setUpdateTitle(updateTitle)
+                .setTitle(title == null ? "" : title)
+                .setUpdateDescription(updateDescription)
+                .setDescription(description == null ? "" : description)
+                .setUpdateImageUrl(updateImageUrl)
+                .setImageUrl(imageUrl == null ? "" : imageUrl)
+                .build());
+    }
+
+    public MessagingGroupDetail updateMessagingGroupParticipant(
+            long conversationId,
+            long requesterId,
+            long targetUserId,
+            boolean updateMuted,
+            boolean muted,
+            boolean updatePermissions,
+            MessagingGroupPermissionSet permissions
+    ) {
+        return blocking.updateMessagingGroupParticipant(UpdateMessagingGroupParticipantRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .setTargetUserId(targetUserId)
+                .setUpdateMuted(updateMuted)
+                .setMuted(muted)
+                .setUpdatePermissions(updatePermissions)
+                .setPermissions(permissions == null ? MessagingGroupPermissionSet.getDefaultInstance() : permissions)
+                .build());
+    }
+
+    public void exitMessagingGroup(long conversationId, long requesterId) {
+        blocking.exitMessagingGroup(MessagingGroupActionRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .build());
+    }
+
+    public void deleteMessagingGroup(long conversationId, long requesterId) {
+        blocking.deleteMessagingGroup(MessagingGroupActionRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .build());
+    }
+
     /**
      * Async subscription used by the WebSocket bridge. Returns a cancellable
      * context; calling {@code cancel(null)} on it tears the gRPC stream down

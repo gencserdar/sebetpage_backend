@@ -31,6 +31,14 @@ public class UserClient {
                 .build());
     }
 
+    public String uploadImage(long uploaderId, byte[] bytes, String contentType, String filename) {
+        return stub.uploadImage(UpdateProfilePhotoRequest.newBuilder()
+                .setUserId(uploaderId).setImageBytes(ByteString.copyFrom(bytes))
+                .setContentType(contentType == null ? "" : contentType)
+                .setOriginalFilename(filename == null ? "" : filename)
+                .build()).getValue();
+    }
+
     public UserProfile updateNameSurname(long id, String name, String surname) {
         return stub.updateNameSurname(UpdateNameSurnameRequest.newBuilder()
                 .setUserId(id).setName(name == null ? "" : name).setSurname(surname == null ? "" : surname).build());

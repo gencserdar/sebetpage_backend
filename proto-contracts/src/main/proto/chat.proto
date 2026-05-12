@@ -19,6 +19,12 @@ service ChatService {
   // Messaging-group operations (distinct from future post-based groups).
   rpc CreateMessagingGroup   (CreateMessagingGroupRequest)   returns (Conversation);
   rpc AddMessagingGroupMember(AddMessagingGroupMemberRequest) returns (Conversation);
+  rpc RemoveMessagingGroupMember(RemoveMessagingGroupMemberRequest) returns (MessagingGroupDetail);
+  rpc GetMessagingGroupDetail(MessagingGroupDetailRequest)    returns (MessagingGroupDetail);
+  rpc UpdateMessagingGroup   (UpdateMessagingGroupRequest)    returns (MessagingGroupDetail);
+  rpc UpdateMessagingGroupParticipant(UpdateMessagingGroupParticipantRequest) returns (MessagingGroupDetail);
+  rpc ExitMessagingGroup     (MessagingGroupActionRequest)    returns (com.serdar.proto.common.Empty);
+  rpc DeleteMessagingGroup   (MessagingGroupActionRequest)    returns (com.serdar.proto.common.Empty);
 
   // Server-stream for WebSocket bridging: gateway subscribes per user and relays
   // to its STOMP clients.
@@ -41,6 +47,9 @@ message Conversation {
   int64  user_b_id = 4;
   string title = 5;
   int64  created_at_millis = 6;
+  string description = 7;
+  string image_url = 8;
+  int64  created_by_id = 9;
 }
 
 message ConversationList { repeated Conversation conversations = 1; }
@@ -146,4 +155,63 @@ message AddMessagingGroupMemberRequest {
   int64 conversation_id = 1;
   int64 requester_id    = 2; // must be an existing member
   int64 new_user_id     = 3;
+}
+
+message RemoveMessagingGroupMemberRequest {
+  int64 conversation_id = 1;
+  int64 requester_id = 2;
+  int64 target_user_id = 3;
+}
+
+message MessagingGroupDetailRequest {
+  int64 conversation_id = 1;
+  int64 requester_id = 2;
+}
+
+message MessagingGroupPermissionSet {
+  bool can_change_photo = 1;
+  bool can_change_description = 2;
+  bool can_change_name = 3;
+  bool can_remove_members = 4;
+  bool can_add_members = 5;
+}
+
+message MessagingGroupParticipant {
+  int64 user_id = 1;
+  string role = 2;
+  bool muted = 3;
+  MessagingGroupPermissionSet permissions = 4;
+}
+
+message MessagingGroupDetail {
+  Conversation conversation = 1;
+  repeated MessagingGroupParticipant participants = 2;
+  MessagingGroupParticipant me = 3;
+  repeated MessagingGroupParticipant known_participants = 4;
+}
+
+message UpdateMessagingGroupRequest {
+  int64 conversation_id = 1;
+  int64 requester_id = 2;
+  bool update_title = 3;
+  string title = 4;
+  bool update_description = 5;
+  string description = 6;
+  bool update_image_url = 7;
+  string image_url = 8;
+}
+
+message UpdateMessagingGroupParticipantRequest {
+  int64 conversation_id = 1;
+  int64 requester_id = 2;
+  int64 target_user_id = 3;
+  bool update_muted = 4;
+  bool muted = 5;
+  bool update_permissions = 6;
+  MessagingGroupPermissionSet permissions = 7;
+}
+
+message MessagingGroupActionRequest {
+  int64 conversation_id = 1;
+  int64 requester_id = 2;
 }

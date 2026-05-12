@@ -15,6 +15,8 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     long countByConversationId(Long conversationId);
 
+    void deleteByConversationId(Long conversationId);
+
     @Query("SELECT COUNT(m) FROM Message m " +
            "WHERE m.conversationId = :cid AND m.senderId <> :meId " +
            "AND (:lastRead IS NULL OR m.createdAt > :lastRead)")

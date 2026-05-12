@@ -15,6 +15,7 @@ service UserService {
   rpc GetProfileByEmail (com.serdar.proto.common.StringRequest) returns (UserProfile);
   rpc GetProfileByNickname(com.serdar.proto.common.StringRequest) returns (UserProfile);
   rpc UpdateProfilePhoto(UpdateProfilePhotoRequest) returns (UserProfile);
+  rpc UploadImage       (UpdateProfilePhotoRequest) returns (com.serdar.proto.common.StringRequest);
   rpc UpdateNameSurname (UpdateNameSurnameRequest) returns (UserProfile);
   // Nickname + email changes are coordinated: user-service checks local rules,
   // delegates uniqueness to auth-service, then mirrors the new value locally.

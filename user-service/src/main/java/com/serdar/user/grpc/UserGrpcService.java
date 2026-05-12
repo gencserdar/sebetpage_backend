@@ -67,6 +67,16 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     }
 
     @Override
+    public void uploadImage(UpdateProfilePhotoRequest req, StreamObserver<com.serdar.proto.common.StringRequest> out) {
+        guard(out, () -> {
+            String url = profileService.uploadImage(req.getUserId(), req.getImageBytes().toByteArray(),
+                    req.getContentType(), req.getOriginalFilename());
+            out.onNext(com.serdar.proto.common.StringRequest.newBuilder().setValue(url).build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void updateNameSurname(UpdateNameSurnameRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
         guard(out, () -> {
             UserProfile p = profileService.updateNameSurname(req.getUserId(), req.getName(), req.getSurname());

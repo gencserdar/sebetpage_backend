@@ -24,6 +24,10 @@ public class Conversation {
     @Column(name = "user_b_id") private Long userBId;
 
     private String title;
+    @Column(length = 1024) private String description;
+    @Column(name = "image_url", length = 1024) private String imageUrl;
+    @Column(name = "created_by_id") private Long createdById;
+    @Column(name = "deleted_at") private LocalDateTime deletedAt;
 
     @Column(nullable = false) private LocalDateTime createdAt;
 }

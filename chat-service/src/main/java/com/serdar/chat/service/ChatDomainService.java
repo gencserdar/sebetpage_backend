@@ -39,7 +39,7 @@ public class ChatDomainService {
 
     @Transactional
     public Message send(long conversationId, long senderId, String plaintext) {
-        Conversation c = conversations.findById(conversationId)
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         assertActiveMember(conversationId, senderId);
         // 1-1 direct conversations: check block state with the other participant.
@@ -70,8 +70,8 @@ public class ChatDomainService {
                             .setConversationId(c.getId())
                             .setMessage(msg)
                             .build());
-            // unread count bump for everyone other than the sender
-            if (p.getUserId() != m.getSenderId()) {
+            // unread count bump for everyone other than the sender, unless they muted the chat.
+            if (p.getUserId() != m.getSenderId() && !Boolean.TRUE.equals(p.getMuted())) {
                 long unread = messages.countUnreadFor(c.getId(), p.getUserId(), p.getLastReadAt());
                 broker.sendTo(p.getUserId(),
                         ChatEvent.newBuilder()
@@ -84,7 +84,7 @@ public class ChatDomainService {
     }
 
     public List<com.serdar.proto.chat.ChatMessage> getLatest(long conversationId, long callerId, int limit) {
-        assertMember(conversationId, callerId);
+        assertActiveMember(conversationId, callerId);
         Pageable page = PageRequest.of(0, Math.max(1, Math.min(limit, 200)));
         Page<Message> desc = messages.findByConversationIdOrderByCreatedAtDesc(conversationId, page);
         List<Message> asc = new ArrayList<>(desc.getContent());
@@ -93,7 +93,7 @@ public class ChatDomainService {
     }
 
     public Page<com.serdar.proto.chat.ChatMessage> getPage(long conversationId, long callerId, int page, int size) {
-        assertMember(conversationId, callerId);
+        assertActiveMember(conversationId, callerId);
         Pageable p = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200)));
         return messages.findByConversationIdOrderByCreatedAtDesc(conversationId, p).map(this::decrypt);
     }
@@ -108,9 +108,9 @@ public class ChatDomainService {
 
     @Transactional
     public MarkReadResult markRead(long conversationId, long readerId) {
-        Conversation c = conversations.findById(conversationId)
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
-        ConversationParticipant me = participants.findByConversationIdAndUserId(conversationId, readerId)
+        ConversationParticipant me = participants.findByConversationIdAndUserIdAndDeletedAtIsNull(conversationId, readerId)
                 .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         me.setLastReadAt(now);
@@ -143,6 +143,7 @@ public class ChatDomainService {
     public int totalUnreadFor(long userId) {
         int total = 0;
         for (ConversationParticipant p : participants.findByUserIdAndDeletedAtIsNull(userId)) {
+            if (Boolean.TRUE.equals(p.getMuted())) continue;
             total += (int) messages.countUnreadFor(p.getConversationId(), userId, p.getLastReadAt());
         }
         return total;
@@ -152,6 +153,10 @@ public class ChatDomainService {
         int total = 0;
         Map<Long, Integer> per = new HashMap<>();
         for (ConversationParticipant p : participants.findByUserIdAndDeletedAtIsNull(userId)) {
+            if (Boolean.TRUE.equals(p.getMuted())) {
+                per.put(p.getConversationId(), 0);
+                continue;
+            }
             int n = (int) messages.countUnreadFor(p.getConversationId(), userId, p.getLastReadAt());
             total += n;
             per.put(p.getConversationId(), n);
@@ -160,7 +165,7 @@ public class ChatDomainService {
     }
 
     public ReadState readState(long conversationId, long callerId) {
-        Conversation c = conversations.findById(conversationId)
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         if (c.getType() != Conversation.Type.DIRECT)
             return new ReadState(null, null, null, 0, callerId);
@@ -182,14 +187,168 @@ public class ChatDomainService {
     }
 
     public Conversation getConversation(long id) {
-        return conversations.findById(id).orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        return conversations.findByIdAndDeletedAtIsNull(id).orElseThrow(() -> ServiceException.notFound("Conversation not found"));
     }
 
     public List<Conversation> myConversations(long userId) {
         return participants.findByUserIdAndDeletedAtIsNull(userId).stream()
-                .map(p -> conversations.findById(p.getConversationId()).orElse(null))
+                .map(p -> conversations.findByIdAndDeletedAtIsNull(p.getConversationId()).orElse(null))
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    public MessagingGroupDetail messagingGroupDetail(long conversationId, long requesterId) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant me = activeParticipant(conversationId, requesterId);
+        return new MessagingGroupDetail(
+                c,
+                participants.findByConversationIdAndDeletedAtIsNull(conversationId),
+                me,
+                participants.findByConversationId(conversationId)
+        );
+    }
+
+    @Transactional
+    public MessagingGroupDetail updateMessagingGroup(
+            long conversationId,
+            long requesterId,
+            boolean updateTitle,
+            String title,
+            boolean updateDescription,
+            String description,
+            boolean updateImageUrl,
+            String imageUrl
+    ) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant requester = activeParticipant(conversationId, requesterId);
+
+        if (updateTitle) {
+            requirePermission(c, requester, Permission.CHANGE_NAME);
+            c.setTitle(blankToNull(title));
+        }
+        if (updateDescription) {
+            requirePermission(c, requester, Permission.CHANGE_DESCRIPTION);
+            c.setDescription(blankToNull(description));
+        }
+        if (updateImageUrl) {
+            requirePermission(c, requester, Permission.CHANGE_PHOTO);
+            c.setImageUrl(blankToNull(imageUrl));
+        }
+
+        conversations.save(c);
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, activeUserIds(conversationId));
+        return messagingGroupDetail(conversationId, requesterId);
+    }
+
+    @Transactional
+    public MessagingGroupDetail updateMessagingGroupParticipant(
+            long conversationId,
+            long requesterId,
+            long targetUserId,
+            boolean updateMuted,
+            boolean muted,
+            boolean updatePermissions,
+            PermissionValues permissions
+    ) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant requester = activeParticipant(conversationId, requesterId);
+        ConversationParticipant target = activeParticipant(conversationId, targetUserId);
+
+        if (updateMuted) {
+            if (requesterId != targetUserId && !isOwner(c, requester)) {
+                throw ServiceException.forbidden("Cannot mute notifications for another member");
+            }
+            target.setMuted(muted);
+        }
+
+        if (updatePermissions) {
+            if (targetUserId == requesterId) {
+                throw ServiceException.invalid("Cannot change your own permissions");
+            }
+            applyPermission(c, requester, target, Permission.CHANGE_PHOTO, permissions.canChangePhoto());
+            applyPermission(c, requester, target, Permission.CHANGE_DESCRIPTION, permissions.canChangeDescription());
+            applyPermission(c, requester, target, Permission.CHANGE_NAME, permissions.canChangeName());
+            applyPermission(c, requester, target, Permission.REMOVE_MEMBERS, permissions.canRemoveMembers());
+            applyPermission(c, requester, target, Permission.ADD_MEMBERS, permissions.canAddMembers());
+        }
+
+        participants.save(target);
+        if (updateMuted) {
+            int unread = Boolean.TRUE.equals(target.getMuted())
+                    ? 0
+                    : (int) messages.countUnreadFor(conversationId, targetUserId, target.getLastReadAt());
+            notifyUnreadAfterCommit(targetUserId, conversationId, unread, totalUnreadFor(targetUserId));
+        }
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, activeUserIds(conversationId));
+        return messagingGroupDetail(conversationId, requesterId);
+    }
+
+    @Transactional
+    public MessagingGroupDetail removeMessagingGroupMember(long conversationId, long requesterId, long targetUserId) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant requester = activeParticipant(conversationId, requesterId);
+        ConversationParticipant target = activeParticipant(conversationId, targetUserId);
+        requirePermission(c, requester, Permission.REMOVE_MEMBERS);
+        if (Objects.equals(c.getCreatedById(), targetUserId)) {
+            throw ServiceException.invalid("Cannot remove the group owner");
+        }
+        if (targetUserId == requesterId) {
+            throw ServiceException.invalid("Use exit group");
+        }
+
+        target.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
+        participants.save(target);
+        saveSystemMessage(c, userClient.nickname(targetUserId) + " was removed from the group");
+
+        Set<Long> audience = activeUserIds(conversationId);
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, audience);
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_LEFT", conversationId, Set.of(targetUserId));
+        notifyUnreadAfterCommit(targetUserId, conversationId, 0, totalUnreadFor(targetUserId));
+        return messagingGroupDetail(conversationId, requesterId);
+    }
+
+    @Transactional
+    public void exitMessagingGroup(long conversationId, long requesterId) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant requester = activeParticipant(conversationId, requesterId);
+        boolean adminLeft = isOwner(c, requester);
+        requester.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
+        participants.save(requester);
+        saveSystemMessage(c, userClient.nickname(requesterId) + " left the group");
+
+        List<ConversationParticipant> remaining = participants.findByConversationIdAndDeletedAtIsNull(conversationId);
+        if (remaining.isEmpty()) {
+            messages.deleteByConversationId(conversationId);
+            participants.deleteByConversationId(conversationId);
+            conversations.delete(c);
+            notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_DELETED", conversationId, Set.of(requesterId));
+            notifyUnreadAfterCommit(requesterId, conversationId, 0, totalUnreadFor(requesterId));
+            return;
+        }
+
+        if (adminLeft && remaining.stream().noneMatch(p -> isOwner(c, p))) {
+            ConversationParticipant nextAdmin = randomParticipant(remaining);
+            grantAdmin(nextAdmin);
+            participants.save(nextAdmin);
+            saveSystemMessage(c, userClient.nickname(nextAdmin.getUserId()) + " is now group admin");
+        }
+
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, activeUserIds(conversationId));
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_LEFT", conversationId, Set.of(requesterId));
+        notifyUnreadAfterCommit(requesterId, conversationId, 0, totalUnreadFor(requesterId));
+    }
+
+    @Transactional
+    public void deleteMessagingGroup(long conversationId, long requesterId) {
+        Conversation c = requireMessagingGroup(conversationId);
+        ConversationParticipant requester = activeParticipant(conversationId, requesterId);
+        if (!isOwner(c, requester)) throw ServiceException.forbidden("Only a group admin can delete this group");
+        Set<Long> audience = activeUserIds(conversationId);
+        messages.deleteByConversationId(conversationId);
+        participants.deleteByConversationId(conversationId);
+        conversations.delete(c);
+        audience.forEach(userId -> notifyUnreadAfterCommit(userId, conversationId, 0, totalUnreadFor(userId)));
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_DELETED", conversationId, audience);
     }
 
     // --- presence -----------------------------------------------------------
@@ -215,31 +374,44 @@ public class ChatDomainService {
      */
     @Transactional
     public Conversation addMessagingGroupMember(long conversationId, long requesterId, long newUserId) {
-        Conversation c = conversations.findById(conversationId)
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         if (c.getType() != Conversation.Type.MESSAGING_GROUP)
             throw ServiceException.invalid("Not a messaging group");
         assertActiveMember(conversationId, requesterId);
 
-        // Idempotent: if already a participant, just return the conversation.
-        if (participants.findByConversationIdAndUserId(conversationId, newUserId).isPresent())
-            return c;
-
         if (requesterId == newUserId)
             throw ServiceException.invalid("Cannot add yourself");
+        ConversationParticipant requester = participants.findByConversationIdAndUserIdAndDeletedAtIsNull(conversationId, requesterId)
+                .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
+        if (!canAddMembers(c, requester))
+            throw ServiceException.forbidden("No permission to add members");
         if (!userClient.friendIds(requesterId).contains(newUserId))
             throw ServiceException.forbidden("Only friends can be added to messaging groups");
         if (userClient.isBlockedEitherWay(requesterId, newUserId))
             throw ServiceException.forbidden("Blocked");
 
-        participants.save(ConversationParticipant.builder()
-                .conversationId(conversationId)
-                .userId(newUserId)
-                .joinedAt(LocalDateTime.now(ZoneOffset.UTC))
-                .role("MEMBER")
-                .build());
+        Optional<ConversationParticipant> existing = participants.findByConversationIdAndUserId(conversationId, newUserId);
+        if (existing.isPresent()) {
+            ConversationParticipant p = existing.get();
+            if (p.getDeletedAt() == null) return c;
+            p.setDeletedAt(null);
+            p.setMuted(false);
+            p.setJoinedAt(LocalDateTime.now(ZoneOffset.UTC));
+            p.setLastReadAt(LocalDateTime.now(ZoneOffset.UTC));
+            participants.save(p);
+        } else {
+            participants.save(ConversationParticipant.builder()
+                    .conversationId(conversationId)
+                    .userId(newUserId)
+                    .joinedAt(LocalDateTime.now(ZoneOffset.UTC))
+                    .lastReadAt(LocalDateTime.now(ZoneOffset.UTC))
+                    .role("MEMBER")
+                    .build());
+        }
 
-        notifyMessagingGroupAddedAfterCommit(conversationId, newUserId);
+        saveSystemMessage(c, userClient.nickname(requesterId) + " added " + userClient.nickname(newUserId) + " to the group");
+        notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_ADDED", conversationId, activeUserIds(conversationId));
         return c;
     }
 
@@ -254,14 +426,120 @@ public class ChatDomainService {
 
     // --- helpers ------------------------------------------------------------
 
-    private void assertMember(long conversationId, long userId) {
-        participants.findByConversationIdAndUserId(conversationId, userId)
+    private void assertActiveMember(long conversationId, long userId) {
+        activeParticipant(conversationId, userId);
+    }
+
+    private ConversationParticipant activeParticipant(long conversationId, long userId) {
+        return participants.findByConversationIdAndUserIdAndDeletedAtIsNull(conversationId, userId)
                 .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
     }
 
-    private void assertActiveMember(long conversationId, long userId) {
-        participants.findByConversationIdAndUserIdAndDeletedAtIsNull(conversationId, userId)
-                .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
+    private Conversation requireMessagingGroup(long conversationId) {
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        if (c.getType() != Conversation.Type.MESSAGING_GROUP)
+            throw ServiceException.invalid("Not a messaging group");
+        return c;
+    }
+
+    private Set<Long> activeUserIds(long conversationId) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(conversationId)) {
+            ids.add(p.getUserId());
+        }
+        return ids;
+    }
+
+    private boolean isOwner(Conversation c, ConversationParticipant p) {
+        return Objects.equals(c.getCreatedById(), p.getUserId()) || "ADMIN".equalsIgnoreCase(p.getRole());
+    }
+
+    private boolean hasPermission(Conversation c, ConversationParticipant p, Permission permission) {
+        if (isOwner(c, p)) return true;
+        return switch (permission) {
+            case CHANGE_PHOTO -> Boolean.TRUE.equals(p.getCanChangePhoto());
+            case CHANGE_DESCRIPTION -> Boolean.TRUE.equals(p.getCanChangeDescription());
+            case CHANGE_NAME -> Boolean.TRUE.equals(p.getCanChangeName());
+            case REMOVE_MEMBERS -> Boolean.TRUE.equals(p.getCanRemoveMembers());
+            case ADD_MEMBERS -> Boolean.TRUE.equals(p.getCanAddMembers());
+        };
+    }
+
+    private boolean canAddMembers(Conversation c, ConversationParticipant p) {
+        return hasPermission(c, p, Permission.ADD_MEMBERS);
+    }
+
+    private void requirePermission(Conversation c, ConversationParticipant p, Permission permission) {
+        if (!hasPermission(c, p, permission)) {
+            throw ServiceException.forbidden("Missing permission");
+        }
+    }
+
+    private void applyPermission(
+            Conversation c,
+            ConversationParticipant requester,
+            ConversationParticipant target,
+            Permission permission,
+            boolean value
+    ) {
+        if (!hasPermission(c, requester, permission)) {
+            boolean current = getPermission(target, permission);
+            if (current != value) throw ServiceException.forbidden("Cannot assign permission you do not have");
+            return;
+        }
+        setPermission(target, permission, value);
+    }
+
+    private boolean getPermission(ConversationParticipant p, Permission permission) {
+        return switch (permission) {
+            case CHANGE_PHOTO -> Boolean.TRUE.equals(p.getCanChangePhoto());
+            case CHANGE_DESCRIPTION -> Boolean.TRUE.equals(p.getCanChangeDescription());
+            case CHANGE_NAME -> Boolean.TRUE.equals(p.getCanChangeName());
+            case REMOVE_MEMBERS -> Boolean.TRUE.equals(p.getCanRemoveMembers());
+            case ADD_MEMBERS -> Boolean.TRUE.equals(p.getCanAddMembers());
+        };
+    }
+
+    private void setPermission(ConversationParticipant p, Permission permission, boolean value) {
+        switch (permission) {
+            case CHANGE_PHOTO -> p.setCanChangePhoto(value);
+            case CHANGE_DESCRIPTION -> p.setCanChangeDescription(value);
+            case CHANGE_NAME -> p.setCanChangeName(value);
+            case REMOVE_MEMBERS -> p.setCanRemoveMembers(value);
+            case ADD_MEMBERS -> p.setCanAddMembers(value);
+        }
+    }
+
+    private ConversationParticipant randomParticipant(List<ConversationParticipant> activeParticipants) {
+        if (activeParticipants.isEmpty()) throw ServiceException.invalid("No members left");
+        return activeParticipants.get(new Random().nextInt(activeParticipants.size()));
+    }
+
+    private void grantAdmin(ConversationParticipant participant) {
+        participant.setRole("ADMIN");
+        participant.setCanChangePhoto(true);
+        participant.setCanChangeDescription(true);
+        participant.setCanChangeName(true);
+        participant.setCanRemoveMembers(true);
+        participant.setCanAddMembers(true);
+    }
+
+    private Message saveSystemMessage(Conversation c, String plaintext) {
+        AesGcm.Enc enc = aes.encrypt(plaintext, AesGcm.aad(c.getId(), 0));
+        Message m = messages.save(Message.builder()
+                .conversationId(c.getId())
+                .senderId(0L)
+                .contentCipherB64(enc.cipherB64())
+                .contentIvB64(enc.ivB64())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
+                .build());
+        broadcastMessage(c, m, plaintext);
+        return m;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private com.serdar.proto.chat.ChatMessage toProtoMessage(Message m, String plaintext) {
@@ -274,11 +552,34 @@ public class ChatDomainService {
                 .build();
     }
 
-    private void notifyMessagingGroupAddedAfterCommit(long conversationId, long userId) {
+    private void notifyMessagingGroupEventAfterCommit(String type, long conversationId, Set<Long> userIds) {
+        Runnable send = () -> {
+            ChatEvent event = ChatEvent.newBuilder()
+                    .setType(type)
+                    .setConversationId(conversationId)
+                    .build();
+            userIds.forEach(id -> broker.sendTo(id, event));
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
+    }
+
+    private void notifyUnreadAfterCommit(long userId, long conversationId, int unread, int totalUnread) {
         Runnable send = () -> broker.sendTo(userId,
                 ChatEvent.newBuilder()
-                        .setType("MESSAGING_GROUP_ADDED")
+                        .setType("UNREAD_COUNT_UPDATE")
                         .setConversationId(conversationId)
+                        .setUnreadCount(unread)
+                        .setTotalUnreadCount(totalUnread)
                         .build());
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -293,8 +594,23 @@ public class ChatDomainService {
         }
     }
 
+    private enum Permission { CHANGE_PHOTO, CHANGE_DESCRIPTION, CHANGE_NAME, REMOVE_MEMBERS, ADD_MEMBERS }
+
     public record MarkReadResult(int unread, int totalUnread, LocalDateTime lastReadAt) {}
     public record UnreadCounts(int total, Map<Long, Integer> perConversation) {}
     public record ReadState(LocalDateTime myLastReadAt, LocalDateTime friendLastReadAt,
                             Long seenMyMessageId, long friendUserId, long myUserId) {}
+    public record PermissionValues(
+            boolean canChangePhoto,
+            boolean canChangeDescription,
+            boolean canChangeName,
+            boolean canRemoveMembers,
+            boolean canAddMembers
+    ) {}
+    public record MessagingGroupDetail(
+            Conversation conversation,
+            List<ConversationParticipant> participants,
+            ConversationParticipant me,
+            List<ConversationParticipant> knownParticipants
+    ) {}
 }
