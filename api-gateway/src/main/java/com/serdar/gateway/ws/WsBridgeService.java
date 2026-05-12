@@ -154,6 +154,10 @@ public class WsBridgeService {
                     "unreadCount", e.getUnreadCount(),
                     "totalUnreadCount", e.getTotalUnreadCount()
             ));
+            case "MESSAGING_GROUP_ADDED" -> stomp.convertAndSendToUser(user, "/queue/friends", Map.of(
+                    "type", "MESSAGING_GROUP_ADDED",
+                    "conversationId", e.getConversationId()
+            ));
             default -> log.debug("Unhandled chat event type: {}", e.getType());
         }
     }

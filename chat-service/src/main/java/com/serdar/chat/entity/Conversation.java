@@ -11,13 +11,14 @@ import java.time.LocalDateTime;
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Conversation {
-    public enum Type { DIRECT, GROUP }
+    public enum Type { DIRECT, GROUP, MESSAGING_GROUP }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false) private Type type;
+    @Column(nullable = false, length = 32)
+    private Type type;
 
     @Column(name = "user_a_id") private Long userAId;
     @Column(name = "user_b_id") private Long userBId;

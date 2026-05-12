@@ -43,6 +43,22 @@ public class ChatClient {
         return blocking.myConversations(IdRequest.newBuilder().setId(userId).build());
     }
 
+    public Conversation createMessagingGroup(long creatorId, java.util.List<Long> memberIds, String name) {
+        return blocking.createMessagingGroup(CreateMessagingGroupRequest.newBuilder()
+                .setCreatorId(creatorId)
+                .addAllMemberIds(memberIds)
+                .setName(name != null ? name : "")
+                .build());
+    }
+
+    public Conversation addMessagingGroupMember(long conversationId, long requesterId, long newUserId) {
+        return blocking.addMessagingGroupMember(AddMessagingGroupMemberRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setRequesterId(requesterId)
+                .setNewUserId(newUserId)
+                .build());
+    }
+
     /**
      * Async subscription used by the WebSocket bridge. Returns a cancellable
      * context; calling {@code cancel(null)} on it tears the gRPC stream down

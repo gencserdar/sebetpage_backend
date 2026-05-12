@@ -17,6 +17,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -200,6 +202,47 @@ public class ChatDomainService {
         return b.build();
     }
 
+    /**
+     * Add a new member to an existing MESSAGING_GROUP conversation.
+     *
+     * Rules:
+     *   - Conversation must be of type MESSAGING_GROUP.
+     *   - Requester must be an active (non-deleted) member.
+     *   - If the new user is already a participant the call is a no-op.
+     *
+     * Returns the conversation so the caller can broadcast it back to the
+     * new member (they need the conversationId to subscribe to the WS topic).
+     */
+    @Transactional
+    public Conversation addMessagingGroupMember(long conversationId, long requesterId, long newUserId) {
+        Conversation c = conversations.findById(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        if (c.getType() != Conversation.Type.MESSAGING_GROUP)
+            throw ServiceException.invalid("Not a messaging group");
+        assertActiveMember(conversationId, requesterId);
+
+        // Idempotent: if already a participant, just return the conversation.
+        if (participants.findByConversationIdAndUserId(conversationId, newUserId).isPresent())
+            return c;
+
+        if (requesterId == newUserId)
+            throw ServiceException.invalid("Cannot add yourself");
+        if (!userClient.friendIds(requesterId).contains(newUserId))
+            throw ServiceException.forbidden("Only friends can be added to messaging groups");
+        if (userClient.isBlockedEitherWay(requesterId, newUserId))
+            throw ServiceException.forbidden("Blocked");
+
+        participants.save(ConversationParticipant.builder()
+                .conversationId(conversationId)
+                .userId(newUserId)
+                .joinedAt(LocalDateTime.now(ZoneOffset.UTC))
+                .role("MEMBER")
+                .build());
+
+        notifyMessagingGroupAddedAfterCommit(conversationId, newUserId);
+        return c;
+    }
+
     public void broadcastPresence(long userId, boolean online) {
         ChatEvent evt = ChatEvent.newBuilder()
                 .setType("PRESENCE_UPDATE")
@@ -229,6 +272,25 @@ public class ChatDomainService {
                 .setContent(plaintext)
                 .setCreatedAtMillis(m.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli())
                 .build();
+    }
+
+    private void notifyMessagingGroupAddedAfterCommit(long conversationId, long userId) {
+        Runnable send = () -> broker.sendTo(userId,
+                ChatEvent.newBuilder()
+                        .setType("MESSAGING_GROUP_ADDED")
+                        .setConversationId(conversationId)
+                        .build());
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    send.run();
+                }
+            });
+        } else {
+            send.run();
+        }
     }
 
     public record MarkReadResult(int unread, int totalUnread, LocalDateTime lastReadAt) {}

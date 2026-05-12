@@ -7,24 +7,31 @@ option java_package = "com.serdar.proto.chat";
 import "common.proto";
 
 service ChatService {
-  rpc GetOrCreateDirect (GetOrCreateDirectRequest) returns (Conversation);
-  rpc SendMessage       (SendMessageRequest)       returns (ChatMessage);
-  rpc GetPage           (GetPageRequest)           returns (MessagePage);
-  rpc GetLatest         (GetLatestRequest)         returns (MessageList);
-  rpc MarkRead          (MarkReadRequest)          returns (MarkReadResponse);
-  rpc GetReadState      (ReadStateRequest)         returns (ReadStateResponse);
-  rpc GetUnreadCounts   (com.serdar.proto.common.IdRequest) returns (UnreadCountsResponse);
-  rpc MyConversations   (com.serdar.proto.common.IdRequest) returns (ConversationList);
+  rpc GetOrCreateDirect      (GetOrCreateDirectRequest)      returns (Conversation);
+  rpc SendMessage            (SendMessageRequest)            returns (ChatMessage);
+  rpc GetPage                (GetPageRequest)                returns (MessagePage);
+  rpc GetLatest              (GetLatestRequest)              returns (MessageList);
+  rpc MarkRead               (MarkReadRequest)               returns (MarkReadResponse);
+  rpc GetReadState           (ReadStateRequest)              returns (ReadStateResponse);
+  rpc GetUnreadCounts        (com.serdar.proto.common.IdRequest) returns (UnreadCountsResponse);
+  rpc MyConversations        (com.serdar.proto.common.IdRequest) returns (ConversationList);
+
+  // Messaging-group operations (distinct from future post-based groups).
+  rpc CreateMessagingGroup   (CreateMessagingGroupRequest)   returns (Conversation);
+  rpc AddMessagingGroupMember(AddMessagingGroupMemberRequest) returns (Conversation);
 
   // Server-stream for WebSocket bridging: gateway subscribes per user and relays
   // to its STOMP clients.
-  rpc SubscribeEvents   (com.serdar.proto.common.IdRequest) returns (stream ChatEvent);
+  rpc SubscribeEvents        (com.serdar.proto.common.IdRequest) returns (stream ChatEvent);
 }
 
 enum ConversationType {
   CONVERSATION_TYPE_UNSPECIFIED = 0;
   DIRECT = 1;
   GROUP = 2;
+  // Private messaging groups: created via the + button in a direct chat.
+  // Kept separate from GROUP to avoid collision with future post-based group chats.
+  MESSAGING_GROUP = 3;
 }
 
 message Conversation {
@@ -125,4 +132,18 @@ message ChatEvent {
 message PresenceEntry {
   int64 user_id = 1;
   bool  online = 2;
+}
+
+// -- Messaging-group messages -----------------------------------------------
+
+message CreateMessagingGroupRequest {
+  int64          creator_id  = 1;
+  repeated int64 member_ids  = 2; // additional members (not including creator)
+  string         name        = 3; // optional display name
+}
+
+message AddMessagingGroupMemberRequest {
+  int64 conversation_id = 1;
+  int64 requester_id    = 2; // must be an existing member
+  int64 new_user_id     = 3;
 }

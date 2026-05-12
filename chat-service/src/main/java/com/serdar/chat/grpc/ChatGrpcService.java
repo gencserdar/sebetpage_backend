@@ -122,6 +122,26 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     @Override
+    public void createMessagingGroup(CreateMessagingGroupRequest req, StreamObserver<com.serdar.proto.chat.Conversation> out) {
+        guard(out, () -> {
+            Conversation c = convs.createMessagingGroup(
+                    req.getCreatorId(), req.getMemberIdsList(), req.getName());
+            out.onNext(toProto(c));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void addMessagingGroupMember(AddMessagingGroupMemberRequest req, StreamObserver<com.serdar.proto.chat.Conversation> out) {
+        guard(out, () -> {
+            Conversation c = chat.addMessagingGroupMember(
+                    req.getConversationId(), req.getRequesterId(), req.getNewUserId());
+            out.onNext(toProto(c));
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void subscribeEvents(IdRequest req, StreamObserver<ChatEvent> out) {
         long userId = req.getId();
         broker.subscribe(userId, out);
@@ -158,8 +178,9 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
         return com.serdar.proto.chat.Conversation.newBuilder()
                 .setId(c.getId())
                 .setType(switch (c.getType()) {
-                    case DIRECT -> ConversationType.DIRECT;
-                    case GROUP  -> ConversationType.GROUP;
+                    case DIRECT          -> ConversationType.DIRECT;
+                    case GROUP           -> ConversationType.GROUP;
+                    case MESSAGING_GROUP -> ConversationType.MESSAGING_GROUP;
                 })
                 .setUserAId(c.getUserAId() == null ? 0 : c.getUserAId())
                 .setUserBId(c.getUserBId() == null ? 0 : c.getUserBId())
