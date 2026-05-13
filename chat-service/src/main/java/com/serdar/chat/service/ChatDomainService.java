@@ -1,6 +1,7 @@
 package com.serdar.chat.service;
 
 import com.serdar.chat.client.UserClient;
+import com.serdar.chat.config.ChatLimits;
 import com.serdar.chat.entity.Conversation;
 import com.serdar.chat.entity.ConversationParticipant;
 import com.serdar.chat.entity.Message;
@@ -34,11 +35,13 @@ public class ChatDomainService {
     private final AesGcm aes;
     private final UserClient userClient;
     private final EventBroker broker;
+    private final ChatLimits limits;
 
     // --- send / read messages -----------------------------------------------
 
     @Transactional
     public Message send(long conversationId, long senderId, String plaintext) {
+        String content = limits.requireValidMessage(plaintext);
         Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         assertActiveMember(conversationId, senderId);
@@ -47,8 +50,10 @@ public class ChatDomainService {
             long other = c.getUserAId().equals(senderId) ? c.getUserBId() : c.getUserAId();
             if (userClient.isBlockedEitherWay(senderId, other))
                 throw ServiceException.forbidden("Blocked");
+        } else if (c.getType() == Conversation.Type.MESSAGING_GROUP) {
+            assertNoBlockedGroupRecipient(conversationId, senderId);
         }
-        AesGcm.Enc enc = aes.encrypt(plaintext, AesGcm.aad(conversationId, senderId));
+        AesGcm.Enc enc = aes.encrypt(content, AesGcm.aad(conversationId, senderId));
         Message m = messages.save(Message.builder()
                 .conversationId(conversationId)
                 .senderId(senderId)
@@ -57,7 +62,7 @@ public class ChatDomainService {
                 .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build());
 
-        broadcastMessage(c, m, plaintext);
+        broadcastMessage(c, m, content);
         return m;
     }
 
@@ -224,11 +229,11 @@ public class ChatDomainService {
 
         if (updateTitle) {
             requirePermission(c, requester, Permission.CHANGE_NAME);
-            c.setTitle(blankToNull(title));
+            c.setTitle(limits.normalizeGroupTitle(title));
         }
         if (updateDescription) {
             requirePermission(c, requester, Permission.CHANGE_DESCRIPTION);
-            c.setDescription(blankToNull(description));
+            c.setDescription(limits.normalizeGroupDescription(description));
         }
         if (updateImageUrl) {
             requirePermission(c, requester, Permission.CHANGE_PHOTO);
@@ -255,7 +260,7 @@ public class ChatDomainService {
         ConversationParticipant target = activeParticipant(conversationId, targetUserId);
 
         if (updateMuted) {
-            if (requesterId != targetUserId && !isOwner(c, requester)) {
+            if (requesterId != targetUserId) {
                 throw ServiceException.forbidden("Cannot mute notifications for another member");
             }
             target.setMuted(muted);
@@ -395,12 +400,14 @@ public class ChatDomainService {
         if (existing.isPresent()) {
             ConversationParticipant p = existing.get();
             if (p.getDeletedAt() == null) return c;
+            ensureMessagingGroupHasRoom(conversationId);
             p.setDeletedAt(null);
             p.setMuted(false);
             p.setJoinedAt(LocalDateTime.now(ZoneOffset.UTC));
             p.setLastReadAt(LocalDateTime.now(ZoneOffset.UTC));
             participants.save(p);
         } else {
+            ensureMessagingGroupHasRoom(conversationId);
             participants.save(ConversationParticipant.builder()
                     .conversationId(conversationId)
                     .userId(newUserId)
@@ -428,6 +435,22 @@ public class ChatDomainService {
 
     private void assertActiveMember(long conversationId, long userId) {
         activeParticipant(conversationId, userId);
+    }
+
+    private void assertNoBlockedGroupRecipient(long conversationId, long senderId) {
+        for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(conversationId)) {
+            if (p.getUserId() == senderId) continue;
+            if (userClient.isBlockedEitherWay(senderId, p.getUserId())) {
+                throw ServiceException.forbidden("Blocked");
+            }
+        }
+    }
+
+    private void ensureMessagingGroupHasRoom(long conversationId) {
+        long activeMembers = participants.countByConversationIdAndDeletedAtIsNull(conversationId);
+        if (activeMembers >= limits.maxMessagingGroupMembers()) {
+            throw ServiceException.invalid("Messaging group member limit exceeded");
+        }
     }
 
     private ConversationParticipant activeParticipant(long conversationId, long userId) {

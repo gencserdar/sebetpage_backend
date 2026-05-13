@@ -88,7 +88,9 @@ public class MessagingGroupController {
         long me = CurrentUser.require().id();
         boolean updateTitle = body.containsKey("title");
         boolean updateDescription = body.containsKey("description");
-        boolean updateImageUrl = body.containsKey("imageUrl");
+        if (body.containsKey("imageUrl")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Use the photo upload endpoint"));
+        }
         MessagingGroupDetail detail = chat.updateMessagingGroup(
                 groupId,
                 me,
@@ -96,8 +98,8 @@ public class MessagingGroupController {
                 asString(body.get("title")),
                 updateDescription,
                 asString(body.get("description")),
-                updateImageUrl,
-                asString(body.get("imageUrl"))
+                false,
+                null
         );
         return ResponseEntity.ok(toDetail(detail));
     }

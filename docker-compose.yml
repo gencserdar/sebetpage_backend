@@ -120,12 +120,6 @@ services:
     environment:
       DB_URL: jdbc:mysql://auth-db:3306/auth_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       RABBITMQ_HOST: rabbitmq
-      # auth-service config keys are RABBITMQ_USERNAME / RABBITMQ_PASSWORD
-      # (Spring's spring.rabbitmq.username/password). The .env names are
-      # RABBITMQ_USER / RABBITMQ_PASS (RabbitMQ image's own convention).
-      # Re-export under the names the app expects.
-      RABBITMQ_USERNAME: ${RABBITMQ_USER:?RABBITMQ_USER required}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASS:?RABBITMQ_PASS required}
     expose: ["${AUTH_HTTP_PORT}", "${AUTH_GRPC_PORT}"]
 
   user-service:
@@ -163,11 +157,13 @@ services:
     depends_on:
       chat-db: { condition: service_healthy }
       user-service: { condition: service_started }
+      rabbitmq: { condition: service_healthy }
     env_file:
       - .env
     environment:
       DB_URL: jdbc:mysql://chat-db:3306/chat_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       USER_SERVICE_GRPC: static://user-service:9102
+      RABBITMQ_HOST: rabbitmq
     expose: ["${CHAT_HTTP_PORT}", "${CHAT_GRPC_PORT}"]
 
   # Async mail dispatcher. Pulls jobs off mail.queue and hands them to SMTP.
@@ -182,8 +178,6 @@ services:
       - .env
     environment:
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USERNAME: ${RABBITMQ_USER:?RABBITMQ_USER required}
-      RABBITMQ_PASSWORD: ${RABBITMQ_PASS:?RABBITMQ_PASS required}
 
   api-gateway:
     build:

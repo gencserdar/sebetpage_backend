@@ -29,7 +29,9 @@ Browser / React app
        v                 v               v               v
    auth_db           user_db         group_db         chat_db
 
-RabbitMQ is used for async mail jobs, consumed by mail-worker.
+RabbitMQ is used for async mail jobs, consumed by mail-worker. Chat-service can
+also publish committed chat events through RabbitMQ so WebSocket fan-out keeps
+working when chat-service runs more than one instance.
 ```
 
 ## Services
@@ -103,7 +105,8 @@ Important token rules:
   explicitly, and WebSocket handshakes verify a short-lived ticket before
   accepting.
 - Rate limiting is applied to login, register, forgot-password, reset-password,
-  activation, and OTP-issuing endpoints.
+  activation, OTP-issuing endpoints, group-chat write/photo actions, and chat
+  sends. STOMP chat sends use the same Redis token-bucket infrastructure.
 - Rate limiting uses the direct remote address by default. Set
   `TRUST_PROXY_HEADERS=true` only behind a trusted proxy that strips spoofed
   forwarding headers and sets the real client IP.
@@ -162,13 +165,18 @@ Then SockJS/STOMP uses that ticket in the handshake:
 SockJS does not reliably support custom Authorization headers, so the real
 access token is never placed in the WebSocket URL. The gateway verifies the
 ticket before accepting the connection. Tickets are short-lived, single-use, and
-bound to the requesting client address/user-agent pair.
+bound to the requesting client address/user-agent pair. Tickets are stored in
+Redis with TTL and consumed with an atomic get-and-delete operation, so the
+single-use guarantee still holds across gateway instances.
 
 After STOMP connect:
 
 1. The gateway opens `chat-service.SubscribeEvents(userId)`.
-2. `chat-service` keeps a per-user stream in its in-memory event broker.
-3. Chat events from gRPC are forwarded to user-scoped STOMP queues.
+2. `chat-service` keeps a per-user stream in its local event broker.
+3. Chat events from gRPC are forwarded to user-scoped STOMP queues. When
+   `CHAT_EVENTS_RABBIT_ENABLED=true`, committed events are also published to a
+   RabbitMQ fanout exchange so other chat-service instances can deliver them to
+   their own connected WebSocket users.
 4. On disconnect, the gRPC stream is cancelled and presence is broadcast.
 
 Current user queues include:
@@ -184,6 +192,13 @@ Chat security notes:
 - `chat-service` verifies the sender is an active participant before accepting a
   message.
 - Direct messages are blocked if either participant has blocked the other.
+- Messaging-group sends are blocked if the sender has a blocked relationship
+  with any active group participant.
+- Messaging groups enforce env-driven limits for max members, title length,
+  description length, and message length.
+- Group photo changes go through the upload endpoint and user-service image
+  validation. The generic group update endpoint does not accept arbitrary
+  `imageUrl` updates.
 - Messages are encrypted at rest with AES-256-GCM using `CHAT_AES_KEY_BASE64`.
 
 ## Docker Compose
@@ -248,6 +263,14 @@ Use `.env` for local compose. Real secrets must not be committed.
 | `RATE_LIMIT_REQUEST_PASSWORD_CHANGE_CAPACITY`, `RATE_LIMIT_REQUEST_PASSWORD_CHANGE_WINDOW_SECONDS` | api-gateway | Password-change code requests per client IP/window |
 | `RATE_LIMIT_ACTIVATE_CAPACITY`, `RATE_LIMIT_ACTIVATE_WINDOW_SECONDS` | api-gateway | Activation attempts per client IP/window |
 | `RATE_LIMIT_RESET_PASSWORD_CAPACITY`, `RATE_LIMIT_RESET_PASSWORD_WINDOW_SECONDS` | api-gateway | Reset-password attempts per client IP/window |
+| `RATE_LIMIT_GROUP_WRITE_CAPACITY`, `RATE_LIMIT_GROUP_WRITE_WINDOW_SECONDS` | api-gateway | Group create/update/member/delete actions per client IP/window |
+| `RATE_LIMIT_GROUP_PHOTO_CAPACITY`, `RATE_LIMIT_GROUP_PHOTO_WINDOW_SECONDS` | api-gateway | Group photo uploads per client IP/window |
+| `RATE_LIMIT_CHAT_SEND_CAPACITY`, `RATE_LIMIT_CHAT_SEND_WINDOW_SECONDS` | api-gateway | REST/STOMP chat sends per client/window |
+| `MESSAGING_GROUP_MAX_MEMBERS` | chat-service | Maximum active members in a messaging group, creator included |
+| `MESSAGING_GROUP_MAX_TITLE_CHARS` | chat-service | Maximum group title length |
+| `MESSAGING_GROUP_MAX_DESCRIPTION_CHARS` | chat-service | Maximum group description length |
+| `CHAT_MESSAGE_MAX_CHARS` | chat-service | Maximum plaintext message length before encryption |
+| `CHAT_EVENTS_RABBIT_ENABLED` | chat-service | Enables RabbitMQ fan-out for chat events across chat-service instances |
 | `RESET_CODE_TTL_MINUTES` | auth-service | Forgot-password reset-link TTL in minutes |
 | `RESET_CODE_MAX_ATTEMPTS` | auth-service | Bad verifier attempts before a reset link is invalidated |
 | `ACCOUNT_CHANGE_CODE_TTL_MINUTES` | auth-service | Logged-in email/password change code TTL in minutes |

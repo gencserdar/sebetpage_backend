@@ -10,12 +10,25 @@ spring:
     hibernate:
       ddl-auto: update
     database-platform: org.hibernate.dialect.MySQL8Dialect
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASS}
 
 server:
   port: ${CHAT_HTTP_PORT}
 
 app:
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  messaging-groups:
+    max-members: ${MESSAGING_GROUP_MAX_MEMBERS}
+    max-title-chars: ${MESSAGING_GROUP_MAX_TITLE_CHARS}
+    max-description-chars: ${MESSAGING_GROUP_MAX_DESCRIPTION_CHARS}
+  messages:
+    max-chars: ${CHAT_MESSAGE_MAX_CHARS}
+  chat-events:
+    rabbit-enabled: ${CHAT_EVENTS_RABBIT_ENABLED}
 
 grpc:
   server:

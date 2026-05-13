@@ -12,5 +12,6 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
     List<ConversationParticipant> findByConversationId(Long conversationId);
     List<ConversationParticipant> findByConversationIdAndDeletedAtIsNull(Long conversationId);
     List<ConversationParticipant> findByUserIdAndDeletedAtIsNull(Long userId);
+    long countByConversationIdAndDeletedAtIsNull(Long conversationId);
     void deleteByConversationId(Long conversationId);
 }

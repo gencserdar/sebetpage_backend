@@ -1,56 +1,88 @@
 package com.serdar.gateway.ws;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class WsTicketService {
 
     private static final SecureRandom RANDOM = new SecureRandom();
-    private final Map<String, Ticket> tickets = new ConcurrentHashMap<>();
+    private static final String KEY_PREFIX = "ws-ticket:";
+
+    private final StringRedisTemplate redis;
+    private final ObjectMapper objectMapper;
     private final long ttlSeconds;
 
-    public WsTicketService(@Value("${app.ws-ticket-ttl-seconds}") long ttlSeconds) {
+    public WsTicketService(
+            StringRedisTemplate redis,
+            ObjectMapper objectMapper,
+            @Value("${app.ws-ticket-ttl-seconds}") long ttlSeconds
+    ) {
         if (ttlSeconds <= 0) throw new IllegalStateException("app.ws-ticket-ttl-seconds must be positive");
+        this.redis = redis;
+        this.objectMapper = objectMapper;
         this.ttlSeconds = ttlSeconds;
     }
 
     public IssuedTicket issue(long userId, String email, String nickname, String clientAddress, String userAgent) {
-        cleanupExpired();
         String value = newTicketValue();
-        tickets.put(value, new Ticket(
+        StoredTicket ticket = new StoredTicket(
                 userId,
                 email,
                 nickname,
                 normalize(clientAddress),
                 normalize(userAgent),
-                Instant.now().plusSeconds(ttlSeconds)
-        ));
+                Instant.now().plusSeconds(ttlSeconds).toEpochMilli()
+        );
+        try {
+            redis.opsForValue().set(redisKey(value), objectMapper.writeValueAsString(ticket), Duration.ofSeconds(ttlSeconds));
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not issue WebSocket ticket", e);
+        }
         return new IssuedTicket(value, ttlSeconds);
     }
 
     public Optional<Ticket> consume(String value, String clientAddress, String userAgent) {
         if (value == null || value.isBlank()) return Optional.empty();
-        Ticket ticket = tickets.remove(value);
-        if (ticket == null) return Optional.empty();
-        if (ticket.expiresAt().isBefore(Instant.now())) {
+        String raw;
+        try {
+            raw = redis.opsForValue().getAndDelete(redisKey(value));
+        } catch (Exception e) {
             return Optional.empty();
         }
-        if (!ticket.clientAddress().equals(normalize(clientAddress))) return Optional.empty();
-        if (!ticket.userAgent().equals(normalize(userAgent))) return Optional.empty();
-        return Optional.of(ticket);
+        if (raw == null || raw.isBlank()) return Optional.empty();
+
+        StoredTicket stored;
+        try {
+            stored = objectMapper.readValue(raw, StoredTicket.class);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+        Instant expiresAt = Instant.ofEpochMilli(stored.expiresAtMillis());
+        if (expiresAt.isBefore(Instant.now())) return Optional.empty();
+        if (!stored.clientAddress().equals(normalize(clientAddress))) return Optional.empty();
+        if (!stored.userAgent().equals(normalize(userAgent))) return Optional.empty();
+
+        return Optional.of(new Ticket(
+                stored.userId(),
+                stored.email(),
+                stored.nickname(),
+                stored.clientAddress(),
+                stored.userAgent(),
+                expiresAt
+        ));
     }
 
-    private void cleanupExpired() {
-        Instant now = Instant.now();
-        tickets.entrySet().removeIf(entry -> entry.getValue().expiresAt().isBefore(now));
+    private static String redisKey(String ticket) {
+        return KEY_PREFIX + ticket;
     }
 
     private static String newTicketValue() {
@@ -71,5 +103,13 @@ public class WsTicketService {
             String clientAddress,
             String userAgent,
             Instant expiresAt
+    ) {}
+    record StoredTicket(
+            long userId,
+            String email,
+            String nickname,
+            String clientAddress,
+            String userAgent,
+            long expiresAtMillis
     ) {}
 }

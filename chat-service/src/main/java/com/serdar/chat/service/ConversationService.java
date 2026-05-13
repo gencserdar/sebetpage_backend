@@ -1,6 +1,7 @@
 package com.serdar.chat.service;
 
 import com.serdar.chat.client.UserClient;
+import com.serdar.chat.config.ChatLimits;
 import com.serdar.chat.entity.Conversation;
 import com.serdar.chat.entity.ConversationParticipant;
 import com.serdar.chat.repository.ConversationParticipantRepository;
@@ -28,6 +29,7 @@ public class ConversationService {
     private final ConversationParticipantRepository participants;
     private final UserClient userClient;
     private final EventBroker broker;
+    private final ChatLimits limits;
 
     /**
      * Canonicalise direct conversations so (a,b) and (b,a) hit the same row.
@@ -77,11 +79,14 @@ public class ConversationService {
         if (validMemberIds.isEmpty()) {
             throw ServiceException.invalid("A messaging group needs at least one other member");
         }
+        if (validMemberIds.size() + 1 > limits.maxMessagingGroupMembers()) {
+            throw ServiceException.invalid("Messaging group member limit exceeded");
+        }
 
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         Conversation c = conversations.save(Conversation.builder()
                 .type(Conversation.Type.MESSAGING_GROUP)
-                .title(name != null && !name.isBlank() ? name.trim() : null)
+                .title(limits.normalizeGroupTitle(name))
                 .createdById(creatorId)
                 .createdAt(now)
                 .build());

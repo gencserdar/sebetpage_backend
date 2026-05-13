@@ -25,8 +25,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST}
     port: ${RABBITMQ_PORT}
-    username: ${RABBITMQ_USERNAME}
-    password: ${RABBITMQ_PASSWORD}
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASS}
     listener:
       simple:
         # Worker tuning: 1–5 concurrent consumers per node, prefetch 10. SMTP
