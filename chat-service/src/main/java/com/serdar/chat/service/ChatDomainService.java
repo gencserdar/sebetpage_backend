@@ -289,11 +289,11 @@ public class ChatDomainService {
         ConversationParticipant requester = activeParticipant(conversationId, requesterId);
         ConversationParticipant target = activeParticipant(conversationId, targetUserId);
         requirePermission(c, requester, Permission.REMOVE_MEMBERS);
-        if (Objects.equals(c.getCreatedById(), targetUserId)) {
-            throw ServiceException.invalid("Cannot remove the group owner");
-        }
         if (targetUserId == requesterId) {
             throw ServiceException.invalid("Use exit group");
+        }
+        if (isOwner(c, target)) {
+            throw ServiceException.invalid("Cannot remove a group admin");
         }
 
         target.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
@@ -483,10 +483,22 @@ public class ChatDomainService {
             Permission permission,
             boolean value
     ) {
-        if (!hasPermission(c, requester, permission)) {
-            boolean current = getPermission(target, permission);
-            if (current != value) throw ServiceException.forbidden("Cannot assign permission you do not have");
+        boolean current = getPermission(target, permission);
+        if (current == value) {
             return;
+        }
+        if (isOwner(c, target)) {
+            throw ServiceException.forbidden("Cannot change admin permissions");
+        }
+        if (isOwner(c, requester)) {
+            setPermission(target, permission, value);
+            return;
+        }
+        if (!hasPermission(c, requester, permission)) {
+            throw ServiceException.forbidden("Cannot assign permission you do not have");
+        }
+        if (!value) {
+            throw ServiceException.forbidden("Only group admins can revoke permissions");
         }
         setPermission(target, permission, value);
     }

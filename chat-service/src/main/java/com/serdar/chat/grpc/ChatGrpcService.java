@@ -279,16 +279,17 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     private static com.serdar.proto.chat.MessagingGroupParticipant toProto(ConversationParticipant p) {
+        boolean admin = "ADMIN".equalsIgnoreCase(p.getRole());
         return com.serdar.proto.chat.MessagingGroupParticipant.newBuilder()
                 .setUserId(p.getUserId())
                 .setRole(p.getRole() == null ? "" : p.getRole())
                 .setMuted(Boolean.TRUE.equals(p.getMuted()))
                 .setPermissions(MessagingGroupPermissionSet.newBuilder()
-                        .setCanChangePhoto(Boolean.TRUE.equals(p.getCanChangePhoto()))
-                        .setCanChangeDescription(Boolean.TRUE.equals(p.getCanChangeDescription()))
-                        .setCanChangeName(Boolean.TRUE.equals(p.getCanChangeName()))
-                        .setCanRemoveMembers(Boolean.TRUE.equals(p.getCanRemoveMembers()))
-                        .setCanAddMembers(Boolean.TRUE.equals(p.getCanAddMembers()))
+                        .setCanChangePhoto(admin || Boolean.TRUE.equals(p.getCanChangePhoto()))
+                        .setCanChangeDescription(admin || Boolean.TRUE.equals(p.getCanChangeDescription()))
+                        .setCanChangeName(admin || Boolean.TRUE.equals(p.getCanChangeName()))
+                        .setCanRemoveMembers(admin || Boolean.TRUE.equals(p.getCanRemoveMembers()))
+                        .setCanAddMembers(admin || Boolean.TRUE.equals(p.getCanAddMembers()))
                         .build())
                 .build();
     }
