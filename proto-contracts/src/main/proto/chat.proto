@@ -29,6 +29,8 @@ service ChatService {
   // Server-stream for WebSocket bridging: gateway subscribes per user and relays
   // to its STOMP clients.
   rpc SubscribeEvents        (com.serdar.proto.common.IdRequest) returns (stream ChatEvent);
+  // Fresh friend-presence snapshot (e.g. after a new friendship is created).
+  rpc GetPresenceSnapshot    (com.serdar.proto.common.IdRequest) returns (ChatEvent);
 }
 
 enum ConversationType {

@@ -1,6 +1,7 @@
 package com.serdar.gateway.controller;
 
 import com.serdar.gateway.client.UserClient;
+import com.serdar.gateway.ws.WsBridgeService;
 import com.serdar.gateway.security.CurrentUser;
 import com.serdar.proto.user.FriendRequest;
 import com.serdar.proto.user.FriendRequestList;
@@ -33,6 +34,7 @@ public class FriendRequestController {
 
     private final UserClient users;
     private final SimpMessagingTemplate stomp;
+    private final WsBridgeService wsBridge;
 
     @PostMapping("/send")
     public ResponseEntity<?> send(@RequestParam String toNickname) {
@@ -142,6 +144,8 @@ public class FriendRequestController {
         // FriendRequestsDropdown only clears on REQUEST_ACCEPTED-style events.
         stomp.convertAndSendToUser(String.valueOf(a), "/queue/friends", Map.of("type", "REQUEST_ACCEPTED"));
         stomp.convertAndSendToUser(String.valueOf(b), "/queue/friends", Map.of("type", "REQUEST_ACCEPTED"));
+        wsBridge.replaySnapshot(a);
+        wsBridge.replaySnapshot(b);
     }
 
     private static FriendRequest findById(FriendRequestList list, long id) {

@@ -91,14 +91,17 @@ public class WsBridgeService {
         }
     }
 
-    /** Re-send the cached presence snapshot to the user, if we have one. */
+    /** Push a fresh presence snapshot (includes newly added friends). */
     public void replaySnapshot(long userId) {
-        Map<String, Object> snap = lastSnapshot.get(userId);
-        if (snap == null) {
-            log.debug("No cached snapshot to replay for user {}", userId);
-            return;
+        try {
+            dispatch(userId, chat.getPresenceSnapshot(userId));
+        } catch (Exception e) {
+            log.warn("Failed to refresh presence snapshot for user {}: {}", userId, e.getMessage());
+            Map<String, Object> snap = lastSnapshot.get(userId);
+            if (snap != null) {
+                stomp.convertAndSendToUser(String.valueOf(userId), "/queue/friends", snap);
+            }
         }
-        stomp.convertAndSendToUser(String.valueOf(userId), "/queue/friends", snap);
     }
 
     /** Route a ChatEvent to the right user-scoped STOMP destination. */

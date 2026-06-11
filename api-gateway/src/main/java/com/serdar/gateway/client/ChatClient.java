@@ -136,6 +136,10 @@ public class ChatClient {
      * cleanly so the server's onCancelHandler fires immediately (instead of
      * waiting for GC).
      */
+    public ChatEvent getPresenceSnapshot(long userId) {
+        return blocking.getPresenceSnapshot(IdRequest.newBuilder().setId(userId).build());
+    }
+
     public Context.CancellableContext subscribeEvents(long userId, StreamObserver<ChatEvent> observer) {
         Context.CancellableContext ctx = Context.current().withCancellation();
         ctx.run(() -> async.subscribeEvents(IdRequest.newBuilder().setId(userId).build(), observer));

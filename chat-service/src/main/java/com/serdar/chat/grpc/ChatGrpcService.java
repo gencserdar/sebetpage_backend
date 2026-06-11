@@ -219,6 +219,14 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     @Override
+    public void getPresenceSnapshot(IdRequest req, StreamObserver<ChatEvent> out) {
+        guard(out, () -> {
+            out.onNext(chat.presenceSnapshotFor(req.getId()));
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void subscribeEvents(IdRequest req, StreamObserver<ChatEvent> out) {
         long userId = req.getId();
         broker.subscribe(userId, out);
