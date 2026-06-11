@@ -60,6 +60,7 @@ public class AuthDomainService {
     @Value("${refresh.expiration.remember}") int refreshRemember;
     @Value("${frontend.base-url}") String frontendBaseUrl;
     @Value("${gateway.base-url}")  String gatewayBaseUrl;
+    @Value("${app.activation-code-ttl-minutes}")   int activationCodeTtlMinutes;
     @Value("${app.reset-code-ttl-minutes}")        int resetCodeTtlMinutes;
     @Value("${app.reset-code-max-attempts}")        int resetCodeMaxAttempts;
     @Value("${app.account-change-code-ttl-minutes}") int accountChangeCodeTtlMinutes;
@@ -69,10 +70,25 @@ public class AuthDomainService {
 
     @PostConstruct
     void validateSecurityConfig() {
+        requireHttpBaseUrl(frontendBaseUrl, "frontend.base-url");
+        if (activationCodeTtlMinutes <= 0)     throw new IllegalStateException("app.activation-code-ttl-minutes must be positive");
         if (resetCodeTtlMinutes <= 0)          throw new IllegalStateException("app.reset-code-ttl-minutes must be positive");
         if (resetCodeMaxAttempts <= 0)         throw new IllegalStateException("app.reset-code-max-attempts must be positive");
         if (accountChangeCodeTtlMinutes <= 0)  throw new IllegalStateException("app.account-change-code-ttl-minutes must be positive");
         if (accountChangeCodeMaxAttempts <= 0) throw new IllegalStateException("app.account-change-code-max-attempts must be positive");
+    }
+
+    private static void requireHttpBaseUrl(String url, String name) {
+        if (url == null || url.isBlank()) {
+            throw new IllegalStateException(name + " must be set");
+        }
+        String trimmed = url.trim();
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            throw new IllegalStateException(name + " must start with http:// or https://");
+        }
+        if (trimmed.endsWith("/")) {
+            throw new IllegalStateException(name + " must not end with a trailing slash");
+        }
     }
 
     // RFC-5322-lite: local@domain.tld — rejects obvious garbage without being
@@ -94,21 +110,16 @@ public class AuthDomainService {
         if (repo.existsByNickname(nickname)) throw ServiceException.conflict("Nickname already used");
         PasswordPolicy.validate(rawPassword);
 
-        String activationCode = UUID.randomUUID().toString();
         Credential c = Credential.builder()
                 .email(emailAddr)
                 .nickname(nickname)
                 .password(encoder.encode(rawPassword))
                 .role(Role.USER)
                 .activated(false)
-                .activationCode(activationCode)
                 .build();
         repo.save(c);
-
-        String link = frontendBaseUrl + "/activate?code=" + activationCode;
-        email.send(emailAddr, "Activate your account",
-                "Please click this link to activate: " + link);
-        return new Registered(c, activationCode);
+        issueActivationEmail(c);
+        return new Registered(c, c.getActivationCode());
     }
 
     // LoginResult now carries the session id so the gRPC layer can include it
@@ -234,10 +245,39 @@ public class AuthDomainService {
     public void activate(String code) {
         Credential c = repo.findByActivationCode(code)
                 .orElseThrow(() -> ServiceException.invalid("Invalid or expired activation link"));
+        LocalDateTime expiresAt = c.getActivationCodeExpiresAt();
+        if (expiresAt != null && expiresAt.isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
+            throw ServiceException.invalid("Invalid or expired activation link");
+        }
 
         c.setActivated(true);
         c.setActivationCode(null);
+        c.setActivationCodeExpiresAt(null);
         repo.save(c);
+    }
+
+    /**
+     * Email enumeration protection: silent no-op when the address is unknown or
+     * already activated. Only unactivated accounts receive a fresh link.
+     */
+    @Transactional
+    public void resendActivation(String emailAddr) {
+        validateEmailFormat(emailAddr);
+        repo.findByEmail(emailAddr).ifPresent(c -> {
+            if (Boolean.TRUE.equals(c.getActivated())) return;
+            issueActivationEmail(c);
+        });
+    }
+
+    private void issueActivationEmail(Credential c) {
+        String activationCode = UUID.randomUUID().toString();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        c.setActivationCode(activationCode);
+        c.setActivationCodeExpiresAt(now.plusMinutes(activationCodeTtlMinutes));
+        repo.save(c);
+        String link = frontendBaseUrl + "/activate?code=" + activationCode;
+        email.send(c.getEmail(), "Activate your account",
+                "Please click this link to activate: " + link);
     }
 
     @Transactional
@@ -539,12 +579,16 @@ public class AuthDomainService {
      */
     @Transactional
     public void abortRegistration(long userId) {
-        Credential c = repo.findById(userId)
-                .orElseThrow(() -> ServiceException.notFound("User not found"));
+        Credential c = repo.findById(userId).orElse(null);
+        if (c == null) return;
         if (Boolean.TRUE.equals(c.getActivated())) {
             throw ServiceException.invalid("Cannot abort an activated account");
         }
-        revokeAllSessions(userId);
+        try {
+            revokeAllSessions(userId);
+        } catch (RuntimeException ignored) {
+            // Unactivated accounts should have no sessions; proceed with credential delete.
+        }
         repo.delete(c);
     }
 

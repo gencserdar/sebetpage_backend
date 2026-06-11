@@ -25,6 +25,13 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                         @Param("lastRead") LocalDateTime lastRead);
 
     @Query("SELECT m FROM Message m " +
+           "WHERE m.conversationId = :cid AND m.senderId <> :meId " +
+           "AND (:lastRead IS NULL OR m.createdAt > :lastRead)")
+    java.util.List<Message> findUnreadMessages(@Param("cid") Long conversationId,
+                                               @Param("meId") Long meId,
+                                               @Param("lastRead") LocalDateTime lastRead);
+
+    @Query("SELECT m FROM Message m " +
            "WHERE m.conversationId = :cid AND m.senderId = :sid " +
            "AND m.createdAt <= :cutoff ORDER BY m.createdAt DESC")
     java.util.List<Message> lastFromSenderBefore(@Param("cid") Long conversationId,

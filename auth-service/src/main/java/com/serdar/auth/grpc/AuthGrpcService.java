@@ -108,6 +108,15 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     }
 
     @Override
+    public void resendActivation(ForgotPasswordRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.resendActivation(req.getEmail());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void forgotPassword(ForgotPasswordRequest req, StreamObserver<Empty> out) {
         guard(out, () -> {
             svc.forgotPassword(req.getEmail());

@@ -22,6 +22,8 @@ service AuthService {
   rpc LogoutAll        (LogoutAllRequest)       returns (com.serdar.proto.common.Empty);
 
   rpc Activate         (ActivateRequest)        returns (com.serdar.proto.common.BoolResponse);
+  // Re-issue activation link for unactivated accounts (silent no-op otherwise).
+  rpc ResendActivation (ForgotPasswordRequest)  returns (com.serdar.proto.common.Empty);
   rpc ForgotPassword   (ForgotPasswordRequest)  returns (com.serdar.proto.common.Empty);
   rpc ResetPassword    (ResetPasswordRequest)   returns (com.serdar.proto.common.BoolResponse);
   rpc ChangePassword   (ChangePasswordRequest)  returns (com.serdar.proto.common.BoolResponse);

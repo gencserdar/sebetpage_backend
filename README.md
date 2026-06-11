@@ -123,7 +123,12 @@ Important token rules:
 
 - Registration creates credentials in `auth-service`, then mirrors the profile
   row in `user-service`.
-- Account activation uses an emailed activation link.
+- Account activation uses an emailed link to `{FRONTEND_BASE_URL}/activate?code=...`.
+  Legacy emails that still point at `GET /api/auth/activate?code=...` are
+  redirected to the same frontend route. Activation codes expire after
+  `ACTIVATION_CODE_TTL_MINUTES` minutes (default 24 hours). Unactivated users
+  can request a fresh link via `POST /api/auth/resend-activation?email=...`
+  (same rate limit as forgot-password; silent no-op if already activated).
 - Forgot-password sends a reset link to the registered email. Reset links expire
   after `RESET_CODE_TTL_MINUTES` minutes and are invalidated after
   `RESET_CODE_MAX_ATTEMPTS` bad verifier attempts.
@@ -273,12 +278,13 @@ Use `.env` for local compose. Real secrets must not be committed.
 | `MESSAGING_GROUP_MAX_DESCRIPTION_CHARS` | chat-service | Maximum group description length |
 | `CHAT_MESSAGE_MAX_CHARS` | chat-service | Maximum plaintext message length before encryption |
 | `CHAT_EVENTS_RABBIT_ENABLED` | chat-service | Enables RabbitMQ fan-out for chat events across chat-service instances |
+| `ACTIVATION_CODE_TTL_MINUTES` | auth-service | Registration activation-link TTL in minutes |
 | `RESET_CODE_TTL_MINUTES` | auth-service | Forgot-password reset-link TTL in minutes |
 | `RESET_CODE_MAX_ATTEMPTS` | auth-service | Bad verifier attempts before a reset link is invalidated |
 | `ACCOUNT_CHANGE_CODE_TTL_MINUTES` | auth-service | Logged-in email/password change code TTL in minutes |
 | `ACCOUNT_CHANGE_CODE_MAX_ATTEMPTS` | auth-service | Bad code attempts before a pending email/password change is invalidated |
-| `FRONTEND_BASE_URL` | auth-service | Password-reset email links |
-| `GATEWAY_BASE_URL` | auth-service | Activation email links |
+| `FRONTEND_BASE_URL` | auth-service, api-gateway | Activation/reset email links; legacy activation GET redirect |
+| `GATEWAY_BASE_URL` | auth-service | Reserved for gateway-facing links in email templates |
 | `RABBITMQ_USER`, `RABBITMQ_PASS` | RabbitMQ/services | Broker credentials |
 | `MAIL_HOST`, `MAIL_PORT`, SMTP vars | mail-worker | Email delivery |
 | AWS S3 vars | user-service | Profile photo storage |

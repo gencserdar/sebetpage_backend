@@ -27,6 +27,7 @@ server:
 
 app:
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  activation-code-ttl-minutes: ${ACTIVATION_CODE_TTL_MINUTES}
   reset-code-ttl-minutes: ${RESET_CODE_TTL_MINUTES}
   reset-code-max-attempts: ${RESET_CODE_MAX_ATTEMPTS}
   account-change-code-ttl-minutes: ${ACCOUNT_CHANGE_CODE_TTL_MINUTES}

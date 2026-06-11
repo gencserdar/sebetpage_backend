@@ -25,6 +25,9 @@ spring:
           max-idle: 4
           min-idle: 1
 
+frontend:
+  base-url: ${FRONTEND_BASE_URL}
+
 app:
   environment: ${APP_ENV}
   allowed-origins: ${ALLOWED_ORIGINS}

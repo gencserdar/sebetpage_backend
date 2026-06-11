@@ -79,7 +79,7 @@ public class ChatDomainService {
                             .build());
             // unread count bump for everyone other than the sender, unless they muted the chat.
             if (p.getUserId() != m.getSenderId() && !Boolean.TRUE.equals(p.getMuted())) {
-                long unread = messages.countUnreadFor(c.getId(), p.getUserId(), p.getLastReadAt());
+                long unread = countVisibleUnread(c, p.getUserId(), p.getLastReadAt());
                 broker.sendTo(p.getUserId(),
                         ChatEvent.newBuilder()
                                 .setType("UNREAD_COUNT_UPDATE")
@@ -94,30 +94,44 @@ public class ChatDomainService {
         assertActiveMember(conversationId, callerId);
         Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
-        Pageable page = PageRequest.of(0, Math.max(1, Math.min(limit, 200)));
-        Page<Message> desc = messages.findByConversationIdOrderByCreatedAtDesc(conversationId, page);
-        List<Message> asc = new ArrayList<>(desc.getContent());
-        Collections.reverse(asc);
-        return asc.stream()
-                .filter(m -> !isMessagingGroup(c) || !shouldHideGroupMessageFrom(callerId, m.getSenderId()))
-                .map(this::decrypt)
-                .toList();
+        int capped = Math.max(1, Math.min(limit, 200));
+        if (!isMessagingGroup(c)) {
+            Page<Message> desc = messages.findByConversationIdOrderByCreatedAtDesc(
+                    conversationId, PageRequest.of(0, capped));
+            List<Message> asc = new ArrayList<>(desc.getContent());
+            Collections.reverse(asc);
+            return asc.stream().map(this::decrypt).toList();
+        }
+        Set<Long> hidden = userClient.blockedByMeIds(callerId);
+        List<com.serdar.proto.chat.ChatMessage> result = new ArrayList<>();
+        int dbPage = 0;
+        int chunk = Math.max(capped, 50);
+        while (result.size() < capped) {
+            Page<Message> desc = messages.findByConversationIdOrderByCreatedAtDesc(
+                    conversationId, PageRequest.of(dbPage++, chunk));
+            if (desc.isEmpty()) break;
+            List<Message> asc = new ArrayList<>(desc.getContent());
+            Collections.reverse(asc);
+            for (Message m : asc) {
+                if (hidden.contains(m.getSenderId())) continue;
+                result.add(decrypt(m));
+                if (result.size() >= capped) break;
+            }
+            if (desc.isLast()) break;
+        }
+        return result;
     }
 
     public Page<com.serdar.proto.chat.ChatMessage> getPage(long conversationId, long callerId, int page, int size) {
         assertActiveMember(conversationId, callerId);
         Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
-        Pageable p = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200)));
-        Page<Message> raw = messages.findByConversationIdOrderByCreatedAtDesc(conversationId, p);
+        int cappedSize = Math.max(1, Math.min(size, 200));
+        Pageable p = PageRequest.of(Math.max(0, page), cappedSize);
         if (!isMessagingGroup(c)) {
-            return raw.map(this::decrypt);
+            return messages.findByConversationIdOrderByCreatedAtDesc(conversationId, p).map(this::decrypt);
         }
-        List<com.serdar.proto.chat.ChatMessage> visible = raw.getContent().stream()
-                .filter(m -> !shouldHideGroupMessageFrom(callerId, m.getSenderId()))
-                .map(this::decrypt)
-                .toList();
-        return new org.springframework.data.domain.PageImpl<>(visible, p, raw.getTotalElements());
+        return getVisibleMessagePage(conversationId, callerId, page, cappedSize, p);
     }
 
     private com.serdar.proto.chat.ChatMessage decrypt(Message m) {
@@ -138,7 +152,7 @@ public class ChatDomainService {
         me.setLastReadAt(now);
         participants.save(me);
 
-        long unread = messages.countUnreadFor(conversationId, readerId, now);
+        long unread = countVisibleUnread(c, readerId, now);
         int totalUnread = totalUnreadFor(readerId);
 
         ChatEvent readEvt = ChatEvent.newBuilder()
@@ -164,9 +178,10 @@ public class ChatDomainService {
 
     public int totalUnreadFor(long userId) {
         int total = 0;
+        Set<Long> hidden = userClient.blockedByMeIds(userId);
         for (ConversationParticipant p : participants.findByUserIdAndDeletedAtIsNull(userId)) {
             if (Boolean.TRUE.equals(p.getMuted())) continue;
-            total += (int) messages.countUnreadFor(p.getConversationId(), userId, p.getLastReadAt());
+            total += visibleUnreadForParticipant(p, userId, hidden);
         }
         return total;
     }
@@ -174,12 +189,13 @@ public class ChatDomainService {
     public UnreadCounts unreadCounts(long userId) {
         int total = 0;
         Map<Long, Integer> per = new HashMap<>();
+        Set<Long> hidden = userClient.blockedByMeIds(userId);
         for (ConversationParticipant p : participants.findByUserIdAndDeletedAtIsNull(userId)) {
             if (Boolean.TRUE.equals(p.getMuted())) {
                 per.put(p.getConversationId(), 0);
                 continue;
             }
-            int n = (int) messages.countUnreadFor(p.getConversationId(), userId, p.getLastReadAt());
+            int n = visibleUnreadForParticipant(p, userId, hidden);
             total += n;
             per.put(p.getConversationId(), n);
         }
@@ -298,7 +314,7 @@ public class ChatDomainService {
         if (updateMuted) {
             int unread = Boolean.TRUE.equals(target.getMuted())
                     ? 0
-                    : (int) messages.countUnreadFor(conversationId, targetUserId, target.getLastReadAt());
+                    : (int) countVisibleUnread(c, targetUserId, target.getLastReadAt());
             notifyUnreadAfterCommit(targetUserId, conversationId, unread, totalUnreadFor(targetUserId));
         }
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, activeUserIds(conversationId));
@@ -485,6 +501,72 @@ public class ChatDomainService {
     private boolean shouldHideGroupMessageFrom(long viewerId, long senderId) {
         if (senderId <= 0 || viewerId == senderId) return false;
         return userClient.blockedByMe(viewerId, senderId);
+    }
+
+    private long countVisibleUnread(Conversation c, long readerId, LocalDateTime lastRead) {
+        if (!isMessagingGroup(c)) {
+            return messages.countUnreadFor(c.getId(), readerId, lastRead);
+        }
+        return countVisibleUnread(c.getId(), readerId, lastRead, userClient.blockedByMeIds(readerId));
+    }
+
+    private long countVisibleUnread(long conversationId, long readerId, LocalDateTime lastRead, Set<Long> hidden) {
+        if (hidden.isEmpty()) {
+            return messages.countUnreadFor(conversationId, readerId, lastRead);
+        }
+        return messages.findUnreadMessages(conversationId, readerId, lastRead).stream()
+                .filter(m -> !hidden.contains(m.getSenderId()))
+                .count();
+    }
+
+    private int visibleUnreadForParticipant(ConversationParticipant p, long userId, Set<Long> hidden) {
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(p.getConversationId()).orElse(null);
+        if (c == null || !isMessagingGroup(c)) {
+            return (int) messages.countUnreadFor(p.getConversationId(), userId, p.getLastReadAt());
+        }
+        return (int) countVisibleUnread(p.getConversationId(), userId, p.getLastReadAt(), hidden);
+    }
+
+    private Page<com.serdar.proto.chat.ChatMessage> getVisibleMessagePage(
+            long conversationId, long callerId, int page, int size, Pageable pageable) {
+        Set<Long> hidden = userClient.blockedByMeIds(callerId);
+        int toSkip = page * size;
+        List<com.serdar.proto.chat.ChatMessage> batch = new ArrayList<>();
+        int dbPage = 0;
+        int visibleSkipped = 0;
+        int chunk = Math.max(size, 50);
+        while (batch.size() < size) {
+            Page<Message> raw = messages.findByConversationIdOrderByCreatedAtDesc(
+                    conversationId, PageRequest.of(dbPage++, chunk));
+            if (raw.isEmpty()) break;
+            for (Message m : raw.getContent()) {
+                if (hidden.contains(m.getSenderId())) continue;
+                if (visibleSkipped++ < toSkip) continue;
+                batch.add(decrypt(m));
+                if (batch.size() >= size) break;
+            }
+            if (raw.isLast()) break;
+        }
+        long totalVisible = countVisibleMessages(conversationId, hidden);
+        return new org.springframework.data.domain.PageImpl<>(batch, pageable, totalVisible);
+    }
+
+    private long countVisibleMessages(long conversationId, Set<Long> hidden) {
+        if (hidden.isEmpty()) {
+            return messages.countByConversationId(conversationId);
+        }
+        long total = 0;
+        int dbPage = 0;
+        int chunk = 200;
+        while (true) {
+            Page<Message> raw = messages.findByConversationIdOrderByCreatedAtDesc(
+                    conversationId, PageRequest.of(dbPage++, chunk));
+            for (Message m : raw.getContent()) {
+                if (!hidden.contains(m.getSenderId())) total++;
+            }
+            if (raw.isLast()) break;
+        }
+        return total;
     }
 
     private void ensureMessagingGroupHasRoom(long conversationId) {

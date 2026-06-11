@@ -46,6 +46,10 @@ public class AuthClient {
         return stub.activate(ActivateRequest.newBuilder().setActivationCode(code).build()).getValue();
     }
 
+    public void resendActivation(String email) {
+        stub.resendActivation(ForgotPasswordRequest.newBuilder().setEmail(email).build());
+    }
+
     public void forgotPassword(String email) {
         stub.forgotPassword(ForgotPasswordRequest.newBuilder().setEmail(email).build());
     }

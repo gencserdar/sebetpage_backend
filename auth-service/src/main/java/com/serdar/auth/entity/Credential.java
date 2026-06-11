@@ -42,6 +42,9 @@ public class Credential {
     @Column(length = 64)
     private String activationCode;
 
+    @Column(name = "activation_code_expires_at")
+    private LocalDateTime activationCodeExpiresAt;
+
     @Column(length = 64)
     private String resetCode;
 

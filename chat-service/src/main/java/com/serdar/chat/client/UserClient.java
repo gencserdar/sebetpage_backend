@@ -8,7 +8,9 @@ import com.serdar.proto.user.UserServiceGrpc;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.stereotype.Component;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class UserClient {
@@ -32,6 +34,14 @@ public class UserClient {
         return stub.blockStatus(
                 BlockStatusRequest.newBuilder().setCallerId(me).setOtherId(other).build()
         ).getBlocksMe();
+    }
+
+    public Set<Long> blockedByMeIds(long userId) {
+        Set<Long> ids = new HashSet<>();
+        stub.myBlocks(IdRequest.newBuilder().setId(userId).build())
+                .getBlocksList()
+                .forEach(b -> ids.add(b.getBlockedId()));
+        return ids;
     }
 
     public List<Long> friendIds(long userId) {

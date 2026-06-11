@@ -9,12 +9,18 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -24,10 +30,13 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
+
     private final AuthClient auth;
     private final UserClient users;
 
     @Value("${app.environment}") private String env;
+    @Value("${frontend.base-url}") private String frontendBaseUrl;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Dtos.RegisterRequest req) {
@@ -38,10 +47,19 @@ public class AuthController {
         try {
             users.createProfile(reg.getUserId(), reg.getEmail(), reg.getNickname(), req.getName(), req.getSurname());
         } catch (RuntimeException e) {
-            try {
-                auth.abortRegistration(reg.getUserId());
-            } catch (RuntimeException rollbackEx) {
-                // Both steps failed — credential may remain orphaned; surface original error.
+            boolean rolledBack = false;
+            for (int attempt = 0; attempt < 2 && !rolledBack; attempt++) {
+                try {
+                    auth.abortRegistration(reg.getUserId());
+                    rolledBack = true;
+                } catch (RuntimeException rollbackEx) {
+                    log.error("Registration rollback attempt {} failed for user {}: {}",
+                            attempt + 1, reg.getUserId(), rollbackEx.getMessage());
+                }
+            }
+            if (!rolledBack) {
+                log.error("Orphan credential may remain for user {} ({})",
+                        reg.getUserId(), req.getEmail());
             }
             throw e;
         }
@@ -106,10 +124,28 @@ public class AuthController {
         return ResponseEntity.ok("Logged out from all devices");
     }
 
+    /**
+     * Legacy activation emails linked here directly. Redirect to the SPA so old
+     * inboxes keep working after activation moved to the frontend.
+     */
+    @GetMapping("/activate")
+    public ResponseEntity<Void> activateRedirect(@RequestParam String code) {
+        String location = frontendBaseUrl + "/activate?code="
+                + URLEncoder.encode(code, StandardCharsets.UTF_8);
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(location)).build();
+    }
+
     @PostMapping("/activate")
     public ResponseEntity<?> activate(@RequestParam String code) {
         auth.activate(code);
         return ResponseEntity.ok("Account activated successfully!");
+    }
+
+    @PostMapping("/resend-activation")
+    public ResponseEntity<?> resendActivation(@RequestParam String email) {
+        auth.resendActivation(email);
+        return ResponseEntity.ok(
+                "If an unactivated account exists for this email, a new activation link was sent.");
     }
 
     @PostMapping("/forgot-password")
