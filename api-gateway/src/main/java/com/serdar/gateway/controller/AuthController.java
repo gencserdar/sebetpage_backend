@@ -106,11 +106,10 @@ public class AuthController {
         return ResponseEntity.ok("Logged out from all devices");
     }
 
-    @GetMapping("/activate")
+    @PostMapping("/activate")
     public ResponseEntity<?> activate(@RequestParam String code) {
-        boolean ok = auth.activate(code);
-        return ok ? ResponseEntity.ok("Account activated successfully!")
-                  : ResponseEntity.badRequest().body(Map.of("error", "Invalid activation code"));
+        auth.activate(code);
+        return ResponseEntity.ok("Account activated successfully!");
     }
 
     @PostMapping("/forgot-password")

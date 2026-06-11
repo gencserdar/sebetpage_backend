@@ -105,7 +105,7 @@ public class AuthDomainService {
                 .build();
         repo.save(c);
 
-        String link = gatewayBaseUrl + "/api/auth/activate?code=" + activationCode;
+        String link = frontendBaseUrl + "/activate?code=" + activationCode;
         email.send(emailAddr, "Activate your account",
                 "Please click this link to activate: " + link);
         return new Registered(c, activationCode);
@@ -231,13 +231,13 @@ public class AuthDomainService {
     }
 
     @Transactional
-    public boolean activate(String code) {
-        return repo.findByActivationCode(code).map(c -> {
-            c.setActivated(true);
-            c.setActivationCode(null);
-            repo.save(c);
-            return true;
-        }).orElse(false);
+    public void activate(String code) {
+        Credential c = repo.findByActivationCode(code)
+                .orElseThrow(() -> ServiceException.invalid("Invalid or expired activation link"));
+
+        c.setActivated(true);
+        c.setActivationCode(null);
+        repo.save(c);
     }
 
     @Transactional

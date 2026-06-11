@@ -101,8 +101,9 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     @Override
     public void activate(ActivateRequest req, StreamObserver<BoolResponse> out) {
         guard(out, () -> {
-            boolean ok = svc.activate(req.getActivationCode());
-            out.onNext(BoolResponse.newBuilder().setValue(ok).build()); out.onCompleted();
+            svc.activate(req.getActivationCode());
+            out.onNext(BoolResponse.newBuilder().setValue(true).build());
+            out.onCompleted();
         });
     }
 

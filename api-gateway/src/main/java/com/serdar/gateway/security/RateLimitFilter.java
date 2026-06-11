@@ -74,7 +74,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         requestEmailCapacity,    requestEmailWindowSeconds),
                 exact("request-pass",  HttpMethod.POST, "/api/user/request-password-change",
                         requestPasswordCapacity, requestPasswordWindowSeconds),
-                exact("activate",      HttpMethod.GET,  "/api/auth/activate",
+                exact("activate",      HttpMethod.POST, "/api/auth/activate",
                         activateCapacity,        activateWindowSeconds),
                 exact("reset",         HttpMethod.POST, "/api/auth/reset-password",
                         resetCapacity,           resetWindowSeconds),
