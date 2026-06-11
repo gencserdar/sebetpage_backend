@@ -36,14 +36,24 @@ public class UserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> byId(@PathVariable long id) {
-        return ResponseEntity.ok(join(auth.byId(id), users.byId(id)));
+        long viewerId = CurrentUser.require().id();
+        UserProfile p = users.byId(id);
+        Credentials c = auth.byId(id);
+        if (viewerId == id) {
+            return ResponseEntity.ok(join(c, p));
+        }
+        return ResponseEntity.ok(publicProfile(c, p));
     }
 
     @GetMapping("/profile/{nickname}")
     public ResponseEntity<?> byNickname(@PathVariable String nickname) {
         UserProfile p = users.byNickname(nickname);
         Credentials c = auth.byId(p.getId());
-        return ResponseEntity.ok(join(c, p));
+        long viewerId = CurrentUser.require().id();
+        if (viewerId == p.getId()) {
+            return ResponseEntity.ok(join(c, p));
+        }
+        return ResponseEntity.ok(publicProfile(c, p));
     }
 
     // --- nickname (single-step, no email confirmation) ---------------------
@@ -141,6 +151,19 @@ public class UserController {
         return Dtos.UserDTO.builder()
                 .id(p.getId())
                 .email(p.getEmail())
+                .nickname(p.getNickname())
+                .name(p.getName())
+                .surname(p.getSurname())
+                .profileImageUrl(p.getProfileImageUrl())
+                .activated(c.getActivated())
+                .role(c.getRole().name())
+                .build();
+    }
+
+    /** Public profile view — email is omitted for other users. */
+    static Dtos.UserDTO publicProfile(Credentials c, UserProfile p) {
+        return Dtos.UserDTO.builder()
+                .id(p.getId())
                 .nickname(p.getNickname())
                 .name(p.getName())
                 .surname(p.getSurname())

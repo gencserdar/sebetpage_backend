@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /workspace
 COPY pom.xml ./pom.xml
@@ -9,11 +10,14 @@ COPY community-service/pom.xml community-service/pom.xml
 COPY chat-service/pom.xml chat-service/pom.xml
 COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY mail-worker/pom.xml mail-worker/pom.xml
-RUN mvn -q -pl proto-contracts,common-lib,community-service -am -DskipTests dependency:go-offline || true
+COPY --chmod=755 build-support/mvn-package.sh /usr/local/bin/mvn-package.sh
+RUN --mount=type=cache,target=/root/.m2,sharing=locked,id=maven-repo \
+    mvn -B -pl proto-contracts,common-lib,community-service -am -DskipTests dependency:go-offline || true
 COPY proto-contracts/src proto-contracts/src
 COPY common-lib/src    common-lib/src
 COPY community-service/src community-service/src
-RUN mvn -q -pl proto-contracts,common-lib,community-service -am -DskipTests package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked,id=maven-repo \
+    mvn-package.sh "proto-contracts,common-lib,community-service"
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app

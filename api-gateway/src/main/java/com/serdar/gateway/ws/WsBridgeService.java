@@ -1,5 +1,6 @@
 package com.serdar.gateway.ws;
 
+import com.serdar.common.grpc.GrpcActorContext;
 import com.serdar.gateway.client.ChatClient;
 import com.serdar.proto.chat.ChatEvent;
 import io.grpc.Context;
@@ -94,7 +95,8 @@ public class WsBridgeService {
     /** Push a fresh presence snapshot (includes newly added friends). */
     public void replaySnapshot(long userId) {
         try {
-            dispatch(userId, chat.getPresenceSnapshot(userId));
+            ChatEvent snapshot = GrpcActorContext.callAs(userId, () -> chat.getPresenceSnapshot(userId));
+            dispatch(userId, snapshot);
         } catch (Exception e) {
             log.warn("Failed to refresh presence snapshot for user {}: {}", userId, e.getMessage());
             Map<String, Object> snap = lastSnapshot.get(userId);

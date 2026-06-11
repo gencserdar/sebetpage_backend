@@ -3,6 +3,8 @@ package com.serdar.gateway.exception;
 import com.serdar.common.GrpcErrors;
 import com.serdar.common.ServiceException;
 import io.grpc.StatusRuntimeException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -17,6 +19,9 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final String GENERIC_ERROR = "Internal server error";
+
     @ExceptionHandler(ServiceException.class)
     public ResponseEntity<?> handle(ServiceException e) {
         return body(mapStatus(e.code()), e.getMessage());
@@ -26,12 +31,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handle(StatusRuntimeException e) {
         Exception translated = (Exception) GrpcErrors.toService(e);
         if (translated instanceof ServiceException svc) return handle(svc);
-        return body(HttpStatus.INTERNAL_SERVER_ERROR, translated.getMessage());
+        log.error("Unhandled gRPC error", e);
+        return body(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_ERROR);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handle(Exception e) {
-        return body(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        log.error("Unhandled request error", e);
+        return body(HttpStatus.INTERNAL_SERVER_ERROR, GENERIC_ERROR);
     }
 
     private static HttpStatus mapStatus(ServiceException.Code c) {

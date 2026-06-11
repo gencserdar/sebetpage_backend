@@ -1,6 +1,9 @@
 package com.serdar.gateway.ws;
 
+import com.serdar.common.grpc.GrpcActorContext;
+import com.serdar.gateway.client.ChatClient;
 import com.serdar.gateway.client.UserClient;
+import com.serdar.proto.chat.ChatEvent;
 import com.serdar.proto.user.UserProfile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,8 +11,9 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Push entity-level "something changed" notifications to the right audience.
@@ -42,6 +46,7 @@ public class EntityEventBroadcaster {
 
     private final SimpMessagingTemplate stomp;
     private final UserClient users;
+    private final ChatClient chat;
 
     /**
      * Publish a USER_UPDATED event to the user themselves (cross-tab sync)
@@ -62,20 +67,24 @@ public class EntityEventBroadcaster {
         // multiple tabs and renaming themselves in tab 1.
         send(id, event);
 
-        // Friends.
-        List<Long> friendIds;
+        Set<Long> audience = new LinkedHashSet<>();
         try {
-            friendIds = users.friendIds(id);
+            ChatEvent snapshot = GrpcActorContext.callAs(id, () -> chat.getPresenceSnapshot(id));
+            snapshot.getPresenceSnapshotList().forEach(entry -> audience.add(entry.getUserId()));
         } catch (Exception e) {
-            // user-service blip — log and keep going. We've already updated
-            // the subject's other tabs; missing friends will catch up on
-            // their next manual refresh.
-            log.warn("USER_UPDATED audience fetch failed for {}: {}", id, e.getMessage());
-            return;
+            log.warn("USER_UPDATED presence audience fetch failed for {}: {}", id, e.getMessage());
         }
-        for (long fid : friendIds) {
-            if (fid == id) continue;       // already sent to self
-            send(fid, event);
+        if (audience.isEmpty()) {
+            try {
+                audience.addAll(users.friendIds(id));
+            } catch (Exception e) {
+                log.warn("USER_UPDATED friend audience fetch failed for {}: {}", id, e.getMessage());
+                return;
+            }
+        }
+        for (long recipientId : audience) {
+            if (recipientId == id) continue;
+            send(recipientId, event);
         }
     }
 

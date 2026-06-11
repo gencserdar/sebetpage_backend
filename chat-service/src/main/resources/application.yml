@@ -8,8 +8,14 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     database-platform: org.hibernate.dialect.MySQL8Dialect
+    properties:
+      "[hibernate.type.preferred_enum_jdbc_type]": VARCHAR
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
   rabbitmq:
     host: ${RABBITMQ_HOST}
     port: ${RABBITMQ_PORT}
@@ -19,7 +25,17 @@ spring:
 server:
   port: ${CHAT_HTTP_PORT}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 app:
+  environment: ${APP_ENV}
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
   messaging-groups:
     max-members: ${MESSAGING_GROUP_MAX_MEMBERS}

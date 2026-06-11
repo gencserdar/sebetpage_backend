@@ -38,7 +38,7 @@ public class SecurityConfig {
                 .cors(c -> c.configurationSource(corsSource()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/api/auth/**", "/ws/**", "/actuator/**").permitAll()
+                        .requestMatchers("/api/auth/**", "/ws/**", "/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 // Default Spring Security returns 403 when the SecurityContext
                 // is empty. Override to 401 so the frontend's apiService can

@@ -11,9 +11,15 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     database-platform: org.hibernate.dialect.MySQL8Dialect
+    properties:
+      "[hibernate.type.preferred_enum_jdbc_type]": VARCHAR
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
   # SMTP creds live in mail-worker — auth-service only publishes mail jobs.
   rabbitmq:
     host: ${RABBITMQ_HOST}
@@ -25,7 +31,17 @@ server:
   # HTTP port only used by Spring actuator; all domain traffic is gRPC.
   port: ${AUTH_HTTP_PORT}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
 app:
+  environment: ${APP_ENV}
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
   activation-code-ttl-minutes: ${ACTIVATION_CODE_TTL_MINUTES}
   reset-code-ttl-minutes: ${RESET_CODE_TTL_MINUTES}

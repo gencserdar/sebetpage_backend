@@ -511,6 +511,7 @@ public class AuthDomainService {
                 "The email on your account was just changed to " + newEmail + "." +
                 "\nIf this wasn't you, contact support immediately.");
 
+        revokeAllSessions(userId);
         return newEmail;
     }
 

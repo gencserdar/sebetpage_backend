@@ -1,5 +1,6 @@
 package com.serdar.gateway.ws;
 
+import com.serdar.common.grpc.GrpcActorContext;
 import com.serdar.gateway.client.ChatClient;
 import com.serdar.gateway.security.RedisTokenBucketRateLimiter;
 import lombok.RequiredArgsConstructor;
@@ -69,8 +70,9 @@ public class ChatStompController {
             senderId = me;
         }
 
+        final long actorId = senderId;
         try {
-            chat.send(conversationId, senderId, content);
+            GrpcActorContext.runAs(actorId, () -> chat.send(conversationId, actorId, content));
         } catch (Exception e) {
             log.warn("chat.send failed for user {} conv {}: {}", me, conversationId, e.getMessage());
         }

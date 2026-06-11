@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 # Multi-stage build for auth-service.
 # Stage 1 compiles the whole reactor (the parent + shared modules + this service)
 # so Maven can resolve proto-contracts and common-lib from the local repo.
@@ -13,12 +14,15 @@ COPY community-service/pom.xml community-service/pom.xml
 COPY chat-service/pom.xml chat-service/pom.xml
 COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY mail-worker/pom.xml mail-worker/pom.xml
-RUN mvn -q -pl proto-contracts,common-lib,auth-service -am -DskipTests dependency:go-offline || true
+COPY --chmod=755 build-support/mvn-package.sh /usr/local/bin/mvn-package.sh
+RUN --mount=type=cache,target=/root/.m2,sharing=locked,id=maven-repo \
+    mvn -B -pl proto-contracts,common-lib,auth-service -am -DskipTests dependency:go-offline || true
 # Then the source.
 COPY proto-contracts/src proto-contracts/src
 COPY common-lib/src    common-lib/src
 COPY auth-service/src  auth-service/src
-RUN mvn -q -pl proto-contracts,common-lib,auth-service -am -DskipTests package
+RUN --mount=type=cache,target=/root/.m2,sharing=locked,id=maven-repo \
+    mvn-package.sh "proto-contracts,common-lib,auth-service"
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app

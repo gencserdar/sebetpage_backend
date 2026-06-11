@@ -76,8 +76,8 @@ public class RedisTokenBucketRateLimiter {
             );
             return !Long.valueOf(0L).equals(result);
         } catch (Exception e) {
-            log.warn("Redis rate-limit unavailable for key '{}', failing open: {}", key, e.getMessage());
-            return true;
+            log.error("Redis rate-limit unavailable for key '{}', failing closed: {}", key, e.getMessage());
+            return false;
         }
     }
 
