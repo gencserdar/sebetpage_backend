@@ -18,6 +18,10 @@ public class AuthClient {
                 .setName(name).setSurname(surname).build());
     }
 
+    public void abortRegistration(long userId) {
+        stub.abortRegistration(IdRequest.newBuilder().setId(userId).build());
+    }
+
     public AuthResponse login(String email, String password, boolean rememberMe) {
         return stub.login(LoginRequest.newBuilder()
                 .setEmail(email).setPassword(password).setRememberMe(rememberMe).build());

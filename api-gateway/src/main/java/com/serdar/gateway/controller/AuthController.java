@@ -34,7 +34,17 @@ public class AuthController {
         // Step 1: create credentials in auth-service (source of truth for uniqueness).
         var reg = auth.register(req.getEmail(), req.getPassword(), req.getNickname(), req.getName(), req.getSurname());
         // Step 2: mirror profile in user-service.
-        users.createProfile(reg.getUserId(), reg.getEmail(), reg.getNickname(), req.getName(), req.getSurname());
+        // Compensation: if step 2 fails, roll back the unactivated credential.
+        try {
+            users.createProfile(reg.getUserId(), reg.getEmail(), reg.getNickname(), req.getName(), req.getSurname());
+        } catch (RuntimeException e) {
+            try {
+                auth.abortRegistration(reg.getUserId());
+            } catch (RuntimeException rollbackEx) {
+                // Both steps failed — credential may remain orphaned; surface original error.
+            }
+            throw e;
+        }
         return ResponseEntity.ok("Registration successful. Please check your email to activate your account.");
     }
 

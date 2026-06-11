@@ -1,4 +1,4 @@
-package com.serdar.group.config;
+package com.serdar.community.config;
 
 import com.serdar.common.grpc.InternalGrpcClientInterceptor;
 import com.serdar.common.grpc.InternalGrpcServerInterceptor;

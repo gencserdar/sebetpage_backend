@@ -11,7 +11,8 @@ import java.time.LocalDateTime;
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Conversation {
-    public enum Type { DIRECT, GROUP, MESSAGING_GROUP }
+    /** DIRECT = 1:1 chat. MESSAGING_GROUP = private group chat (FriendsPanel). */
+    public enum Type { DIRECT, MESSAGING_GROUP }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

@@ -37,13 +37,13 @@ services:
       timeout: 3s
       retries: 20
 
-  group-db:
+  community-db:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
-      MYSQL_DATABASE: group_db
-    ports: ["127.0.0.1:${GROUP_DB_PORT}:3306"]
-    volumes: [group_data:/var/lib/mysql]
+      MYSQL_DATABASE: community_db
+    ports: ["127.0.0.1:${COMMUNITY_DB_PORT}:3306"]
+    volumes: [community_data:/var/lib/mysql]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD}"]
       interval: 5s
@@ -136,19 +136,19 @@ services:
       AUTH_SERVICE_GRPC: static://auth-service:9101
     expose: ["${USER_HTTP_PORT}", "${USER_GRPC_PORT}"]
 
-  group-service:
+  community-service:
     build:
       context: .
-      dockerfile: group-service/Dockerfile
+      dockerfile: community-service/Dockerfile
     depends_on:
-      group-db: { condition: service_healthy }
+      community-db: { condition: service_healthy }
       user-service: { condition: service_started }
     env_file:
       - .env
     environment:
-      DB_URL: jdbc:mysql://group-db:3306/group_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      DB_URL: jdbc:mysql://community-db:3306/community_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       USER_SERVICE_GRPC: static://user-service:9102
-    expose: ["${GROUP_HTTP_PORT}", "${GROUP_GRPC_PORT}"]
+    expose: ["${COMMUNITY_HTTP_PORT}", "${COMMUNITY_GRPC_PORT}"]
 
   chat-service:
     build:
@@ -186,7 +186,7 @@ services:
     depends_on:
       auth-service: { condition: service_started }
       user-service: { condition: service_started }
-      group-service: { condition: service_started }
+      community-service: { condition: service_started }
       chat-service: { condition: service_started }
       redis: { condition: service_healthy }
     env_file:
@@ -196,7 +196,7 @@ services:
       # name, NOT the host-mapped names from .env.
       AUTH_GRPC_HOST: auth-service
       USER_GRPC_HOST: user-service
-      GROUP_GRPC_HOST: group-service
+      COMMUNITY_GRPC_HOST: community-service
       CHAT_GRPC_HOST: chat-service
       REDIS_HOST: redis
     ports: ["${GATEWAY_PORT}:${GATEWAY_PORT}"]
@@ -204,7 +204,7 @@ services:
 volumes:
   auth_data:
   user_data:
-  group_data:
+  community_data:
   chat_data:
   rabbitmq_data:
   redis_data:

@@ -529,7 +529,23 @@ public class AuthDomainService {
         c.setPassword(c.getPendingPasswordNewHash());
         clearPendingPassword(c);
         repo.save(c);
+        revokeAllSessions(userId);
         return true;
+    }
+
+    /**
+     * Compensation step for failed registration: removes an unactivated credential
+     * when profile creation in user-service fails after auth.register succeeded.
+     */
+    @Transactional
+    public void abortRegistration(long userId) {
+        Credential c = repo.findById(userId)
+                .orElseThrow(() -> ServiceException.notFound("User not found"));
+        if (Boolean.TRUE.equals(c.getActivated())) {
+            throw ServiceException.invalid("Cannot abort an activated account");
+        }
+        revokeAllSessions(userId);
+        repo.delete(c);
     }
 
     private static void clearPendingPassword(Credential c) {

@@ -1,4 +1,4 @@
-package com.serdar.group.client;
+package com.serdar.community.client;
 
 import com.serdar.proto.common.IdRequest;
 import com.serdar.proto.user.UserProfile;
@@ -6,10 +6,6 @@ import com.serdar.proto.user.UserServiceGrpc;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.stereotype.Component;
 
-/**
- * Validates that a user id exists in user-service before we let it join a
- * group or receive an invite. Keeps FK-like integrity without a real FK.
- */
 @Component
 public class UserClient {
 

@@ -53,12 +53,13 @@ app:
     reset-password:
       capacity: ${RATE_LIMIT_RESET_PASSWORD_CAPACITY}
       window-seconds: ${RATE_LIMIT_RESET_PASSWORD_WINDOW_SECONDS}
-    group-write:
-      capacity: ${RATE_LIMIT_GROUP_WRITE_CAPACITY}
-      window-seconds: ${RATE_LIMIT_GROUP_WRITE_WINDOW_SECONDS}
-    group-photo:
-      capacity: ${RATE_LIMIT_GROUP_PHOTO_CAPACITY}
-      window-seconds: ${RATE_LIMIT_GROUP_PHOTO_WINDOW_SECONDS}
+    messaging-group-write:
+      # New name: RATE_LIMIT_MESSAGING_GROUP_* ; legacy: RATE_LIMIT_GROUP_* ; else defaults.
+      capacity: ${RATE_LIMIT_MESSAGING_GROUP_WRITE_CAPACITY:${RATE_LIMIT_GROUP_WRITE_CAPACITY:30}}
+      window-seconds: ${RATE_LIMIT_MESSAGING_GROUP_WRITE_WINDOW_SECONDS:${RATE_LIMIT_GROUP_WRITE_WINDOW_SECONDS:60}}
+    messaging-group-photo:
+      capacity: ${RATE_LIMIT_MESSAGING_GROUP_PHOTO_CAPACITY:${RATE_LIMIT_GROUP_PHOTO_CAPACITY:10}}
+      window-seconds: ${RATE_LIMIT_MESSAGING_GROUP_PHOTO_WINDOW_SECONDS:${RATE_LIMIT_GROUP_PHOTO_WINDOW_SECONDS:300}}
     chat-send:
       capacity: ${RATE_LIMIT_CHAT_SEND_CAPACITY}
       window-seconds: ${RATE_LIMIT_CHAT_SEND_WINDOW_SECONDS}
@@ -82,8 +83,8 @@ grpc:
       keep-alive-without-calls: true
     user-service:
       address: static://${USER_GRPC_HOST}:${USER_GRPC_PORT}
-    group-service:
-      address: static://${GROUP_GRPC_HOST}:${GROUP_GRPC_PORT}
+    community-service:
+      address: static://${COMMUNITY_GRPC_HOST}:${COMMUNITY_GRPC_PORT}
     chat-service:
       address: static://${CHAT_GRPC_HOST}:${CHAT_GRPC_PORT}
 

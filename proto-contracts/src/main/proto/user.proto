@@ -47,7 +47,7 @@ service UserService {
   rpc BlockStatus        (BlockStatusRequest) returns (BlockStatusResponse);
   rpc IsBlockedEitherWay (BlockStatusRequest) returns (com.serdar.proto.common.BoolResponse);
 
-  // Search (user results only; group-service contributes its own half)
+  // Search (user results only; community-service contributes its own half)
   rpc SearchUsers        (SearchRequest) returns (UserSearchList);
 }
 

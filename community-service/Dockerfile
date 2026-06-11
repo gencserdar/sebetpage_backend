@@ -5,18 +5,18 @@ COPY proto-contracts/pom.xml proto-contracts/pom.xml
 COPY common-lib/pom.xml common-lib/pom.xml
 COPY auth-service/pom.xml auth-service/pom.xml
 COPY user-service/pom.xml user-service/pom.xml
-COPY group-service/pom.xml group-service/pom.xml
+COPY community-service/pom.xml community-service/pom.xml
 COPY chat-service/pom.xml chat-service/pom.xml
 COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY mail-worker/pom.xml mail-worker/pom.xml
-RUN mvn -q -pl proto-contracts,common-lib,group-service -am -DskipTests dependency:go-offline || true
+RUN mvn -q -pl proto-contracts,common-lib,community-service -am -DskipTests dependency:go-offline || true
 COPY proto-contracts/src proto-contracts/src
 COPY common-lib/src    common-lib/src
-COPY group-service/src group-service/src
-RUN mvn -q -pl proto-contracts,common-lib,group-service -am -DskipTests package
+COPY community-service/src community-service/src
+RUN mvn -q -pl proto-contracts,common-lib,community-service -am -DskipTests package
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /workspace/group-service/target/*.jar /app/app.jar
+COPY --from=build /workspace/community-service/target/*.jar /app/app.jar
 EXPOSE 8103 9103
 ENTRYPOINT ["java","-jar","/app/app.jar"]

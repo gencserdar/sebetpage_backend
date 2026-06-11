@@ -16,7 +16,7 @@ service ChatService {
   rpc GetUnreadCounts        (com.serdar.proto.common.IdRequest) returns (UnreadCountsResponse);
   rpc MyConversations        (com.serdar.proto.common.IdRequest) returns (ConversationList);
 
-  // Messaging-group operations (distinct from future post-based groups).
+  // Private messaging-group chat (FriendsPanel). Post communities live in community-service.
   rpc CreateMessagingGroup   (CreateMessagingGroupRequest)   returns (Conversation);
   rpc AddMessagingGroupMember(AddMessagingGroupMemberRequest) returns (Conversation);
   rpc RemoveMessagingGroupMember(RemoveMessagingGroupMemberRequest) returns (MessagingGroupDetail);
@@ -34,9 +34,8 @@ service ChatService {
 enum ConversationType {
   CONVERSATION_TYPE_UNSPECIFIED = 0;
   DIRECT = 1;
-  GROUP = 2;
+  reserved 2; // was GROUP — removed; post communities use community-service.
   // Private messaging groups: created via the + button in a direct chat.
-  // Kept separate from GROUP to avoid collision with future post-based group chats.
   MESSAGING_GROUP = 3;
 }
 

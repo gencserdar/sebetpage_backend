@@ -1,4 +1,4 @@
-package com.serdar.group.entity;
+package com.serdar.community.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,11 +6,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-// `groups` is a reserved word in MySQL 8, so we use `user_groups` to avoid the
-// "you have an error in your SQL syntax" that Hibernate otherwise emits on DDL.
-@Table(name = "user_groups")
+@Table(name = "communities")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Group {
+public class Community {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 

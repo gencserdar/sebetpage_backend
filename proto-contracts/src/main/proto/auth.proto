@@ -11,6 +11,8 @@ import "common.proto";
 // active device/browser), keyed by session_id which is embedded in the JWTs.
 service AuthService {
   rpc Register         (RegisterRequest)        returns (RegisterResponse);
+  // Compensation: delete unactivated credential when profile creation fails.
+  rpc AbortRegistration (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
   rpc Login            (LoginRequest)           returns (AuthResponse);
   rpc Refresh          (RefreshRequest)         returns (AuthResponse);
 

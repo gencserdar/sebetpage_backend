@@ -6,8 +6,8 @@
         <artifactId>social-platform-parent</artifactId>
         <version>1.0.0</version>
     </parent>
-    <artifactId>group-service</artifactId>
-    <name>group-service</name>
+    <artifactId>community-service</artifactId>
+    <name>community-service</name>
     <dependencies>
         <dependency><groupId>com.serdar</groupId><artifactId>proto-contracts</artifactId></dependency>
         <dependency><groupId>com.serdar</groupId><artifactId>common-lib</artifactId></dependency>

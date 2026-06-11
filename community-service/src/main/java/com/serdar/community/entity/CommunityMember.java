@@ -1,4 +1,4 @@
-package com.serdar.group.entity;
+package com.serdar.community.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -6,21 +6,21 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "group_members", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"group_id", "user_id"})
+@Table(name = "community_members", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"community_id", "user_id"})
 }, indexes = {
-        @Index(columnList = "group_id"),
+        @Index(columnList = "community_id"),
         @Index(columnList = "user_id")
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class GroupMember {
+public class CommunityMember {
 
     public enum Role { MEMBER, ADMIN, PENDING }
 
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "group_id", nullable = false) private Long groupId;
+    @Column(name = "community_id", nullable = false) private Long communityId;
     @Column(name = "user_id", nullable = false)  private Long userId;
 
     @Column(nullable = false) private LocalDateTime joinedAt;

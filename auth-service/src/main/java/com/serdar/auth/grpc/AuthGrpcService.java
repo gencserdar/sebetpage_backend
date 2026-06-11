@@ -40,6 +40,15 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     }
 
     @Override
+    public void abortRegistration(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.abortRegistration(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void login(LoginRequest req, StreamObserver<AuthResponse> out) {
         guard(out, () -> {
             AuthDomainService.LoginResult r = svc.login(req.getEmail(), req.getPassword(), req.getRememberMe());

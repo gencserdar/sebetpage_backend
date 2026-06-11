@@ -1,6 +1,6 @@
 spring:
   application:
-    name: group-service
+    name: community-service
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -12,14 +12,14 @@ spring:
     database-platform: org.hibernate.dialect.MySQL8Dialect
 
 server:
-  port: ${GROUP_HTTP_PORT}
+  port: ${COMMUNITY_HTTP_PORT}
 
 app:
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
 
 grpc:
   server:
-    port: ${GROUP_GRPC_PORT}
+    port: ${COMMUNITY_GRPC_PORT}
     security:
       enabled: ${GRPC_SERVER_SECURITY_ENABLED}
       client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}

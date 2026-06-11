@@ -9,7 +9,7 @@ COPY proto-contracts/pom.xml proto-contracts/pom.xml
 COPY common-lib/pom.xml common-lib/pom.xml
 COPY auth-service/pom.xml auth-service/pom.xml
 COPY user-service/pom.xml user-service/pom.xml
-COPY group-service/pom.xml group-service/pom.xml
+COPY community-service/pom.xml community-service/pom.xml
 COPY chat-service/pom.xml chat-service/pom.xml
 COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY mail-worker/pom.xml mail-worker/pom.xml

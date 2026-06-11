@@ -256,7 +256,6 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
                 .setId(c.getId())
                 .setType(switch (c.getType()) {
                     case DIRECT          -> ConversationType.DIRECT;
-                    case GROUP           -> ConversationType.GROUP;
                     case MESSAGING_GROUP -> ConversationType.MESSAGING_GROUP;
                 })
                 .setUserAId(c.getUserAId() == null ? 0 : c.getUserAId())

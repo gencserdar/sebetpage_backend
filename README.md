@@ -41,7 +41,7 @@ working when chat-service runs more than one instance.
 | `api-gateway` | REST API, CORS, JWT auth filter, refresh-cookie endpoints, WebSocket/STOMP bridge | Yes, `GATEWAY_PORT` |
 | `auth-service` | Credentials, password hashing, JWT issuing/validation, activation, password reset, refresh-token storage | No, Docker network only |
 | `user-service` | Profiles, friend requests, friendships, blocks, search, S3 profile photos | No, Docker network only |
-| `group-service` | Groups, group members, group invites | No, Docker network only |
+| `community-service` | Post communities (subreddit-style), members, invites | No, Docker network only |
 | `chat-service` | Conversations, AES-GCM encrypted messages, unread/read state, presence, chat events | No, Docker network only |
 | `mail-worker` | Consumes RabbitMQ mail jobs and sends SMTP email | No |
 
@@ -58,7 +58,7 @@ microservices/
   api-gateway/            public edge service
   auth-service/           credentials and session source of truth
   user-service/           profile/friend/block/search domain
-  group-service/          group domain
+  community-service/      post communities (not chat groups)
   chat-service/           chat, read state, presence, events
   mail-worker/            async email worker
   docker-compose.yml      local orchestration
@@ -214,7 +214,7 @@ Compose starts:
 
 - one MySQL database per service
 - RabbitMQ with management UI bound to localhost only
-- `auth-service`, `user-service`, `group-service`, `chat-service`
+- `auth-service`, `user-service`, `community-service`, `chat-service`
 - `mail-worker`
 - `api-gateway`
 
@@ -263,8 +263,8 @@ Use `.env` for local compose. Real secrets must not be committed.
 | `RATE_LIMIT_REQUEST_PASSWORD_CHANGE_CAPACITY`, `RATE_LIMIT_REQUEST_PASSWORD_CHANGE_WINDOW_SECONDS` | api-gateway | Password-change code requests per client IP/window |
 | `RATE_LIMIT_ACTIVATE_CAPACITY`, `RATE_LIMIT_ACTIVATE_WINDOW_SECONDS` | api-gateway | Activation attempts per client IP/window |
 | `RATE_LIMIT_RESET_PASSWORD_CAPACITY`, `RATE_LIMIT_RESET_PASSWORD_WINDOW_SECONDS` | api-gateway | Reset-password attempts per client IP/window |
-| `RATE_LIMIT_GROUP_WRITE_CAPACITY`, `RATE_LIMIT_GROUP_WRITE_WINDOW_SECONDS` | api-gateway | Group create/update/member/delete actions per client IP/window |
-| `RATE_LIMIT_GROUP_PHOTO_CAPACITY`, `RATE_LIMIT_GROUP_PHOTO_WINDOW_SECONDS` | api-gateway | Group photo uploads per client IP/window |
+| `RATE_LIMIT_MESSAGING_GROUP_WRITE_CAPACITY`, `RATE_LIMIT_MESSAGING_GROUP_WRITE_WINDOW_SECONDS` | api-gateway | Messaging-group create/update/member/delete per client IP/window |
+| `RATE_LIMIT_MESSAGING_GROUP_PHOTO_CAPACITY`, `RATE_LIMIT_MESSAGING_GROUP_PHOTO_WINDOW_SECONDS` | api-gateway | Messaging-group photo uploads per client IP/window |
 | `RATE_LIMIT_CHAT_SEND_CAPACITY`, `RATE_LIMIT_CHAT_SEND_WINDOW_SECONDS` | api-gateway | REST/STOMP chat sends per client/window |
 | `MESSAGING_GROUP_MAX_MEMBERS` | chat-service | Maximum active members in a messaging group, creator included |
 | `MESSAGING_GROUP_MAX_TITLE_CHARS` | chat-service | Maximum group title length |
@@ -294,7 +294,7 @@ Then run services in separate terminals with the required environment variables:
 ```bash
 mvn -pl auth-service spring-boot:run
 mvn -pl user-service spring-boot:run
-mvn -pl group-service spring-boot:run
+mvn -pl community-service spring-boot:run
 mvn -pl chat-service spring-boot:run
 mvn -pl api-gateway spring-boot:run
 mvn -pl mail-worker spring-boot:run

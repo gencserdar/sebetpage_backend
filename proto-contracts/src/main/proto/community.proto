@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package com.serdar.proto.community;
+option java_multiple_files = true;
+option java_package = "com.serdar.proto.community";
+
+import "common.proto";
+
+// Post-style communities (subreddit-like). Private chat groups live in chat-service
+// as MESSAGING_GROUP conversations — not here.
+service CommunityService {
+  rpc CreateCommunity     (CreateCommunityRequest)    returns (Community);
+  rpc Invite              (InviteRequest)             returns (com.serdar.proto.common.Empty);
+  rpc RespondToInvite     (RespondInviteRequest)      returns (com.serdar.proto.common.Empty);
+  rpc MyCommunities       (com.serdar.proto.common.IdRequest) returns (CommunityList);
+  rpc SearchCommunities   (SearchCommunitiesRequest)  returns (CommunityList);
+  rpc IsMember            (MembershipRequest)         returns (com.serdar.proto.common.BoolResponse);
+}
+
+enum CommunityRole {
+  COMMUNITY_ROLE_UNSPECIFIED = 0;
+  MEMBER = 1;
+  ADMIN  = 2;
+  PENDING = 3;
+}
+
+message Community {
+  int64  id = 1;
+  string name = 2;
+  string description = 3;
+  bool   is_private = 4;
+  int64  created_by = 5;
+  int64  created_at_millis = 6;
+  CommunityRole my_role = 7;
+}
+
+message CommunityList { repeated Community communities = 1; }
+
+message CreateCommunityRequest {
+  int64  creator_id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message InviteRequest {
+  int64 community_id = 1;
+  int64 inviter_id = 2;
+  int64 to_user_id = 3;
+}
+
+message RespondInviteRequest {
+  int64 invite_id = 1;
+  int64 responder_id = 2;
+  bool  accept = 3;
+}
+
+message MembershipRequest {
+  int64 community_id = 1;
+  int64 user_id = 2;
+}
+
+message SearchCommunitiesRequest {
+  string keyword = 1;
+}
