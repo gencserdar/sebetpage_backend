@@ -182,6 +182,10 @@ message MessagingGroupParticipant {
   string role = 2;
   bool muted = 3;
   MessagingGroupPermissionSet permissions = 4;
+  // True when the requester blocked this participant (shown in blocked list).
+  bool blocked_by_me = 5;
+  // True when this participant blocked the requester (shown as offline).
+  bool blocks_me = 6;
 }
 
 message MessagingGroupDetail {

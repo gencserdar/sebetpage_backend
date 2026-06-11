@@ -50,8 +50,6 @@ public class ChatDomainService {
             long other = c.getUserAId().equals(senderId) ? c.getUserBId() : c.getUserAId();
             if (userClient.isBlockedEitherWay(senderId, other))
                 throw ServiceException.forbidden("Blocked");
-        } else if (c.getType() == Conversation.Type.MESSAGING_GROUP) {
-            assertNoBlockedGroupRecipient(conversationId, senderId);
         }
         AesGcm.Enc enc = aes.encrypt(content, AesGcm.aad(conversationId, senderId));
         Message m = messages.save(Message.builder()
@@ -68,7 +66,11 @@ public class ChatDomainService {
 
     private void broadcastMessage(Conversation c, Message m, String plaintext) {
         com.serdar.proto.chat.ChatMessage msg = toProtoMessage(m, plaintext);
+        boolean group = c.getType() == Conversation.Type.MESSAGING_GROUP;
         for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(c.getId())) {
+            if (group && shouldHideGroupMessageFrom(p.getUserId(), m.getSenderId())) {
+                continue;
+            }
             broker.sendTo(p.getUserId(),
                     ChatEvent.newBuilder()
                             .setType("MESSAGE")
@@ -90,17 +92,32 @@ public class ChatDomainService {
 
     public List<com.serdar.proto.chat.ChatMessage> getLatest(long conversationId, long callerId, int limit) {
         assertActiveMember(conversationId, callerId);
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         Pageable page = PageRequest.of(0, Math.max(1, Math.min(limit, 200)));
         Page<Message> desc = messages.findByConversationIdOrderByCreatedAtDesc(conversationId, page);
         List<Message> asc = new ArrayList<>(desc.getContent());
         Collections.reverse(asc);
-        return asc.stream().map(this::decrypt).toList();
+        return asc.stream()
+                .filter(m -> !isMessagingGroup(c) || !shouldHideGroupMessageFrom(callerId, m.getSenderId()))
+                .map(this::decrypt)
+                .toList();
     }
 
     public Page<com.serdar.proto.chat.ChatMessage> getPage(long conversationId, long callerId, int page, int size) {
         assertActiveMember(conversationId, callerId);
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         Pageable p = PageRequest.of(Math.max(0, page), Math.max(1, Math.min(size, 200)));
-        return messages.findByConversationIdOrderByCreatedAtDesc(conversationId, p).map(this::decrypt);
+        Page<Message> raw = messages.findByConversationIdOrderByCreatedAtDesc(conversationId, p);
+        if (!isMessagingGroup(c)) {
+            return raw.map(this::decrypt);
+        }
+        List<com.serdar.proto.chat.ChatMessage> visible = raw.getContent().stream()
+                .filter(m -> !shouldHideGroupMessageFrom(callerId, m.getSenderId()))
+                .map(this::decrypt)
+                .toList();
+        return new org.springframework.data.domain.PageImpl<>(visible, p, raw.getTotalElements());
     }
 
     private com.serdar.proto.chat.ChatMessage decrypt(Message m) {
@@ -360,8 +377,8 @@ public class ChatDomainService {
 
     public ChatEvent presenceSnapshotFor(long userId) {
         ChatEvent.Builder b = ChatEvent.newBuilder().setType("PRESENCE_SNAPSHOT");
-        for (long fid : userClient.friendIds(userId)) {
-            b.addPresenceSnapshot(PresenceEntry.newBuilder().setUserId(fid).setOnline(broker.isOnline(fid)));
+        for (long id : presenceAudienceFor(userId)) {
+            b.addPresenceSnapshot(PresenceEntry.newBuilder().setUserId(id).setOnline(broker.isOnline(id)));
         }
         return b.build();
     }
@@ -428,7 +445,7 @@ public class ChatDomainService {
                 .setSubjectUserId(userId)
                 .setOnline(online)
                 .build();
-        for (long fid : userClient.friendIds(userId)) broker.sendTo(fid, evt);
+        for (long id : presenceAudienceFor(userId)) broker.sendTo(id, evt);
     }
 
     // --- helpers ------------------------------------------------------------
@@ -437,13 +454,37 @@ public class ChatDomainService {
         activeParticipant(conversationId, userId);
     }
 
-    private void assertNoBlockedGroupRecipient(long conversationId, long senderId) {
-        for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(conversationId)) {
-            if (p.getUserId() == senderId) continue;
-            if (userClient.isBlockedEitherWay(senderId, p.getUserId())) {
-                throw ServiceException.forbidden("Blocked");
+    /** Users whose online status this viewer cares about: friends + messaging-group co-members. */
+    private Set<Long> presenceAudienceFor(long userId) {
+        Set<Long> audience = new LinkedHashSet<>(userClient.friendIds(userId));
+        for (ConversationParticipant mine : participants.findByUserIdAndDeletedAtIsNull(userId)) {
+            Conversation c = conversations.findByIdAndDeletedAtIsNull(mine.getConversationId()).orElse(null);
+            if (c == null || c.getType() != Conversation.Type.MESSAGING_GROUP) continue;
+            for (ConversationParticipant member : participants.findByConversationIdAndDeletedAtIsNull(c.getId())) {
+                if (!member.getUserId().equals(userId)) audience.add(member.getUserId());
             }
         }
+        return audience;
+    }
+
+    public boolean isBlockedByMe(long viewerId, long participantUserId) {
+        if (viewerId == participantUserId) return false;
+        return userClient.blockedByMe(viewerId, participantUserId);
+    }
+
+    public boolean isBlocksMe(long viewerId, long participantUserId) {
+        if (viewerId == participantUserId) return false;
+        return userClient.blocksMe(viewerId, participantUserId);
+    }
+
+    private boolean isMessagingGroup(Conversation c) {
+        return c.getType() == Conversation.Type.MESSAGING_GROUP;
+    }
+
+    /** Hide only messages from users the viewer blocked — not the reverse. */
+    private boolean shouldHideGroupMessageFrom(long viewerId, long senderId) {
+        if (senderId <= 0 || viewerId == senderId) return false;
+        return userClient.blockedByMe(viewerId, senderId);
     }
 
     private void ensureMessagingGroupHasRoom(long conversationId) {

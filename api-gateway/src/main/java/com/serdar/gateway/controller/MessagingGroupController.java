@@ -198,6 +198,8 @@ public class MessagingGroupController {
         row.put("profileImageUrl", profile == null ? "" : profile.getProfileImageUrl());
         row.put("role", participant.getRole());
         row.put("muted", participant.getMuted());
+        row.put("blockedByMe", participant.getBlockedByMe());
+        row.put("blocksMe", participant.getBlocksMe());
         row.put("permissions", toPermissions(participant.getPermissions()));
         return row;
     }

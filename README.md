@@ -192,8 +192,10 @@ Chat security notes:
 - `chat-service` verifies the sender is an active participant before accepting a
   message.
 - Direct messages are blocked if either participant has blocked the other.
-- Messaging-group sends are blocked if the sender has a blocked relationship
-  with any active group participant.
+- Messaging-group sends are always delivered. Only the blocker hides the
+  blocked user's messages; the blocked user still sees the blocker's messages
+  and sees the blocker as offline. Group settings list users you blocked;
+  users who blocked you appear offline.
 - Messaging groups enforce env-driven limits for max members, title length,
   description length, and message length.
 - Group photo changes go through the upload endpoint and user-service image

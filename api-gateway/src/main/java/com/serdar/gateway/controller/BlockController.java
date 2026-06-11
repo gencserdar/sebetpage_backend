@@ -47,6 +47,8 @@ public class BlockController {
 
         users.block(me, userId);
 
+        notifyBlockStatusChanged(me, userId);
+
         // Reuse FRIEND_REMOVED — FriendChat already listens for it and locks
         // the input on a match by email/nickname. From the chat's perspective
         // a block is the same outcome as a removal: the other side is gone.
@@ -68,6 +70,7 @@ public class BlockController {
     public ResponseEntity<?> unblock(@PathVariable long userId) {
         long me = CurrentUser.require().id();
         users.unblock(me, userId);
+        notifyBlockStatusChanged(me, userId);
         return ResponseEntity.ok(Map.of("status", "unblocked", "blockedId", userId));
     }
 
@@ -105,6 +108,18 @@ public class BlockController {
                 "profileImageUrl", b.getBlockedProfileImageUrl(),
                 "createdAt", java.time.Instant.ofEpochMilli(b.getCreatedAtMillis()).toString()
         );
+    }
+
+    /** So open group settings / group chat can refresh blocked-by-me / blocks-me flags. */
+    private void notifyBlockStatusChanged(long a, long b) {
+        stomp.convertAndSendToUser(String.valueOf(a), "/queue/friends", Map.of(
+                "type", "BLOCK_STATUS_CHANGED",
+                "userId", b
+        ));
+        stomp.convertAndSendToUser(String.valueOf(b), "/queue/friends", Map.of(
+                "type", "BLOCK_STATUS_CHANGED",
+                "userId", a
+        ));
     }
 
     private static Map<String, Object> summary(UserProfile p) {

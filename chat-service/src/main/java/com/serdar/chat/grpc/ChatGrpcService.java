@@ -147,7 +147,7 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     public void removeMessagingGroupMember(RemoveMessagingGroupMemberRequest req, StreamObserver<MessagingGroupDetail> out) {
         guard(out, () -> {
             out.onNext(toProto(chat.removeMessagingGroupMember(
-                    req.getConversationId(), req.getRequesterId(), req.getTargetUserId())));
+                    req.getConversationId(), req.getRequesterId(), req.getTargetUserId()), req.getRequesterId()));
             out.onCompleted();
         });
     }
@@ -155,7 +155,7 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     @Override
     public void getMessagingGroupDetail(MessagingGroupDetailRequest req, StreamObserver<MessagingGroupDetail> out) {
         guard(out, () -> {
-            out.onNext(toProto(chat.messagingGroupDetail(req.getConversationId(), req.getRequesterId())));
+            out.onNext(toProto(chat.messagingGroupDetail(req.getConversationId(), req.getRequesterId()), req.getRequesterId()));
             out.onCompleted();
         });
     }
@@ -172,7 +172,7 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
                     req.getDescription(),
                     req.getUpdateImageUrl(),
                     req.getImageUrl()
-            )));
+            ), req.getRequesterId()));
             out.onCompleted();
         });
     }
@@ -195,7 +195,7 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
                             p.getCanRemoveMembers(),
                             p.getCanAddMembers()
                     )
-            )));
+            ), req.getRequesterId()));
             out.onCompleted();
         });
     }
@@ -276,21 +276,23 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
                 .build();
     }
 
-    private static MessagingGroupDetail toProto(ChatDomainService.MessagingGroupDetail detail) {
+    private MessagingGroupDetail toProto(ChatDomainService.MessagingGroupDetail detail, long requesterId) {
         MessagingGroupDetail.Builder b = MessagingGroupDetail.newBuilder()
                 .setConversation(toProto(detail.conversation()))
-                .setMe(toProto(detail.me()));
-        detail.participants().forEach(p -> b.addParticipants(toProto(p)));
-        detail.knownParticipants().forEach(p -> b.addKnownParticipants(toProto(p)));
+                .setMe(toParticipantProto(detail.me(), requesterId));
+        detail.participants().forEach(p -> b.addParticipants(toParticipantProto(p, requesterId)));
+        detail.knownParticipants().forEach(p -> b.addKnownParticipants(toParticipantProto(p, requesterId)));
         return b.build();
     }
 
-    private static com.serdar.proto.chat.MessagingGroupParticipant toProto(ConversationParticipant p) {
+    private com.serdar.proto.chat.MessagingGroupParticipant toParticipantProto(ConversationParticipant p, long requesterId) {
         boolean admin = "ADMIN".equalsIgnoreCase(p.getRole());
         return com.serdar.proto.chat.MessagingGroupParticipant.newBuilder()
                 .setUserId(p.getUserId())
                 .setRole(p.getRole() == null ? "" : p.getRole())
                 .setMuted(Boolean.TRUE.equals(p.getMuted()))
+                .setBlockedByMe(chat.isBlockedByMe(requesterId, p.getUserId()))
+                .setBlocksMe(chat.isBlocksMe(requesterId, p.getUserId()))
                 .setPermissions(MessagingGroupPermissionSet.newBuilder()
                         .setCanChangePhoto(admin || Boolean.TRUE.equals(p.getCanChangePhoto()))
                         .setCanChangeDescription(admin || Boolean.TRUE.equals(p.getCanChangeDescription()))

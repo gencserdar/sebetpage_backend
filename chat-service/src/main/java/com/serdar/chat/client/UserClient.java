@@ -22,6 +22,18 @@ public class UserClient {
         ).getValue();
     }
 
+    public boolean blockedByMe(long me, long other) {
+        return stub.blockStatus(
+                BlockStatusRequest.newBuilder().setCallerId(me).setOtherId(other).build()
+        ).getBlockedByMe();
+    }
+
+    public boolean blocksMe(long me, long other) {
+        return stub.blockStatus(
+                BlockStatusRequest.newBuilder().setCallerId(me).setOtherId(other).build()
+        ).getBlocksMe();
+    }
+
     public List<Long> friendIds(long userId) {
         IdList r = stub.listFriendIds(IdRequest.newBuilder().setId(userId).build());
         return r.getIdsList();
