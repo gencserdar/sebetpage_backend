@@ -20,29 +20,31 @@ public class UserClient {
     private UserServiceGrpc.UserServiceBlockingStub stub;
 
     public boolean isBlockedEitherWay(long a, long b) {
-        return stub.isBlockedEitherWay(
+        return GrpcActorContext.callAs(a, () -> stub.isBlockedEitherWay(
                 BlockStatusRequest.newBuilder().setCallerId(a).setOtherId(b).build()
-        ).getValue();
+        ).getValue());
     }
 
     public boolean blockedByMe(long me, long other) {
-        return stub.blockStatus(
+        return GrpcActorContext.callAs(me, () -> stub.blockStatus(
                 BlockStatusRequest.newBuilder().setCallerId(me).setOtherId(other).build()
-        ).getBlockedByMe();
+        ).getBlockedByMe());
     }
 
     public boolean blocksMe(long me, long other) {
-        return stub.blockStatus(
+        return GrpcActorContext.callAs(me, () -> stub.blockStatus(
                 BlockStatusRequest.newBuilder().setCallerId(me).setOtherId(other).build()
-        ).getBlocksMe();
+        ).getBlocksMe());
     }
 
     public Set<Long> blockedByMeIds(long userId) {
-        Set<Long> ids = new HashSet<>();
-        stub.myBlocks(IdRequest.newBuilder().setId(userId).build())
-                .getBlocksList()
-                .forEach(b -> ids.add(b.getBlockedId()));
-        return ids;
+        return GrpcActorContext.callAs(userId, () -> {
+            Set<Long> ids = new HashSet<>();
+            stub.myBlocks(IdRequest.newBuilder().setId(userId).build())
+                    .getBlocksList()
+                    .forEach(b -> ids.add(b.getBlockedId()));
+            return ids;
+        });
     }
 
     public List<Long> friendIds(long userId) {

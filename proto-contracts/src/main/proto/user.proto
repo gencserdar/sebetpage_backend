@@ -26,6 +26,8 @@ service UserService {
   // just mirrors the new value into the profile row so denormalized email
   // fields stay in sync.
   rpc SyncProfileEmail  (ChangeEmailRequest)    returns (UserProfile);
+  rpc GetProfileSettings (com.serdar.proto.common.IdRequest) returns (ProfileSettings);
+  rpc UpdateProfileSettings (UpdateProfileSettingsRequest) returns (ProfileSettings);
 
   // Friendships
   rpc GetFriendStatus   (GetFriendStatusRequest) returns (FriendStatusResponse);
@@ -102,6 +104,20 @@ message ChangeNicknameRequest {
 message ChangeEmailRequest {
   int64  user_id = 1;
   string new_email = 2;
+}
+
+message ProfileSettings {
+  int64  user_id = 1;
+  string bio = 2;
+  string social_links_json = 3;
+  string profile_card_json = 4;
+}
+
+message UpdateProfileSettingsRequest {
+  int64  user_id = 1;
+  string bio = 2;
+  string social_links_json = 3;
+  string profile_card_json = 4;
 }
 
 message GetFriendStatusRequest {

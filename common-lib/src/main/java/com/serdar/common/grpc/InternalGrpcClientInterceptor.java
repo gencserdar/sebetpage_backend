@@ -25,7 +25,7 @@ public class InternalGrpcClientInterceptor implements ClientInterceptor {
             @Override
             public void start(Listener<RespT> responseListener, Metadata headers) {
                 headers.put(InternalGrpcAuth.TOKEN_HEADER, token);
-                Long actingUserId = GrpcActorContext.current();
+                Long actingUserId = GatewayUserContext.currentViewerId();
                 if (actingUserId != null) {
                     headers.put(InternalGrpcAuth.GATEWAY_USER_ID_HEADER, String.valueOf(actingUserId));
                 }

@@ -58,6 +58,20 @@ public class UserClient {
         return stub.syncProfileEmail(ChangeEmailRequest.newBuilder().setUserId(id).setNewEmail(email).build());
     }
 
+    public ProfileSettings getProfileSettings(long userId) {
+        return stub.getProfileSettings(IdRequest.newBuilder().setId(userId).build());
+    }
+
+    public ProfileSettings updateProfileSettings(
+            long userId, String bio, String socialLinksJson, String profileCardJson) {
+        return stub.updateProfileSettings(UpdateProfileSettingsRequest.newBuilder()
+                .setUserId(userId)
+                .setBio(bio == null ? "" : bio)
+                .setSocialLinksJson(socialLinksJson == null ? "[]" : socialLinksJson)
+                .setProfileCardJson(profileCardJson == null ? "{\"widgets\":[]}" : profileCardJson)
+                .build());
+    }
+
     public FriendStatusResponse friendStatus(long callerId, String otherNickname) {
         return stub.getFriendStatus(GetFriendStatusRequest.newBuilder()
                 .setCallerId(callerId).setOtherNickname(otherNickname).build());

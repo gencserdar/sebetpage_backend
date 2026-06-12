@@ -1,0 +1,2 @@
+ALTER TABLE user_profiles
+    MODIFY COLUMN bio VARCHAR(180) NOT NULL DEFAULT '';

@@ -55,6 +55,44 @@ public class Dtos {
         private String role;
         private String nickname;
         private String profileImageUrl;
+        private String bio;
+    }
+
+    @Data @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class ProfileSettingsDTO {
+        private Long userId;
+        private String bio;
+        private java.util.List<SocialLinkDTO> socialLinks;
+        private ProfileCardDTO profileCard;
+    }
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class SocialLinkDTO {
+        private String id;
+        private String platform;
+        private String url;
+    }
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class ProfileCardDTO {
+        private java.util.List<ProfileWidgetDTO> widgets;
+    }
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class ProfileWidgetDTO {
+        private String id;
+        private String type;
+        private int x;
+        private int y;
+        private int w;
+        private int h;
+    }
+
+    @Data @NoArgsConstructor @AllArgsConstructor
+    public static class UpdateProfileSettingsRequest {
+        private String bio;
+        private java.util.List<SocialLinkDTO> socialLinks;
+        private ProfileCardDTO profileCard;
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor

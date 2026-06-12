@@ -3,16 +3,21 @@ package com.serdar.gateway.controller;
 import com.serdar.gateway.client.AuthClient;
 import com.serdar.gateway.client.UserClient;
 import com.serdar.gateway.dto.Dtos;
+import com.serdar.gateway.mapper.ProfileSettingsMapper;
 import com.serdar.gateway.security.CurrentUser;
 import com.serdar.gateway.ws.EntityEventBroadcaster;
 import com.serdar.proto.auth.Credentials;
+import com.serdar.proto.user.BlockStatusResponse;
+import com.serdar.proto.user.ProfileSettings;
 import com.serdar.proto.user.UserProfile;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -27,6 +32,7 @@ public class UserController {
     private final AuthClient auth;
     private final UserClient users;
     private final EntityEventBroadcaster broadcaster;
+    private final ProfileSettingsMapper profileSettingsMapper;
 
     @GetMapping("/me")
     public ResponseEntity<?> me() {
@@ -37,15 +43,12 @@ public class UserController {
     @GetMapping("/{id}")
     public ResponseEntity<?> byId(@PathVariable long id) {
         long viewerId = CurrentUser.require().id();
-        UserProfile p = users.byId(id);
-        Credentials c = auth.byId(id);
-        if (viewerId != id && c.getFrozen()) {
+        if (isBlockedEitherWay(viewerId, id)) {
             return ResponseEntity.notFound().build();
         }
-        if (viewerId == id) {
-            return ResponseEntity.ok(join(c, p));
-        }
-        return ResponseEntity.ok(publicProfile(c, p));
+        UserProfile p = users.byId(id);
+        Credentials c = auth.byId(id);
+        return ResponseEntity.ok(profileForViewer(viewerId, c, p));
     }
 
     @GetMapping("/profile/{nickname}")
@@ -53,13 +56,39 @@ public class UserController {
         UserProfile p = users.byNickname(nickname);
         Credentials c = auth.byId(p.getId());
         long viewerId = CurrentUser.require().id();
-        if (viewerId != p.getId() && c.getFrozen()) {
+        if (isBlockedEitherWay(viewerId, p.getId())) {
             return ResponseEntity.notFound().build();
         }
-        if (viewerId == p.getId()) {
-            return ResponseEntity.ok(join(c, p));
+        return ResponseEntity.ok(profileForViewer(viewerId, c, p));
+    }
+
+    @GetMapping("/{id}/profile-settings")
+    public ResponseEntity<?> profileSettings(@PathVariable long id) {
+        long viewerId = CurrentUser.require().id();
+        if (isBlockedEitherWay(viewerId, id)) {
+            return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(publicProfile(c, p));
+        Credentials c = auth.byId(id);
+        if (viewerId != id && c.getFrozen()) {
+            return ResponseEntity.ok(emptyProfileSettings(id));
+        }
+        ProfileSettings settings = users.getProfileSettings(id);
+        return ResponseEntity.ok(profileSettingsMapper.fromProto(settings));
+    }
+
+    @PutMapping("/profile-settings")
+    public ResponseEntity<?> updateProfileSettings(@RequestBody Dtos.UpdateProfileSettingsRequest body) {
+        long id = CurrentUser.require().id();
+        try {
+            ProfileSettings updated = users.updateProfileSettings(
+                    id,
+                    body.getBio() == null ? "" : body.getBio(),
+                    profileSettingsMapper.toSocialLinksJson(body.getSocialLinks()),
+                    profileSettingsMapper.toProfileCardJson(body.getProfileCard()));
+            return ResponseEntity.ok(profileSettingsMapper.fromProto(updated));
+        } catch (JsonProcessingException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid profile settings payload"));
+        }
     }
 
     // --- nickname (single-step, no email confirmation) ---------------------
@@ -155,6 +184,7 @@ public class UserController {
     public ResponseEntity<?> freeze() {
         long id = CurrentUser.require().id();
         auth.freezeAccount(id);
+        broadcaster.userUpdated(users.byId(id));
         return ResponseEntity.ok(Map.of("status", "frozen"));
     }
 
@@ -162,10 +192,47 @@ public class UserController {
     public ResponseEntity<?> unfreeze() {
         long id = CurrentUser.require().id();
         auth.unfreezeAccount(id);
+        broadcaster.userUpdated(users.byId(id));
         return ResponseEntity.ok(Map.of("status", "active"));
     }
 
     // --- helpers -----------------------------------------------------------
+
+    private Dtos.UserDTO profileForViewer(long viewerId, Credentials c, UserProfile p) {
+        if (viewerId == p.getId()) {
+            return join(c, p);
+        }
+        if (c.getFrozen()) {
+            return frozenPublicProfile(c, p);
+        }
+        return publicProfile(c, p);
+    }
+
+    private boolean isBlockedEitherWay(long viewerId, long targetId) {
+        if (viewerId == targetId) return false;
+        BlockStatusResponse status = users.blockStatus(viewerId, targetId);
+        return status.getEither();
+    }
+
+    private static Dtos.ProfileSettingsDTO emptyProfileSettings(long userId) {
+        return Dtos.ProfileSettingsDTO.builder()
+                .userId(userId)
+                .bio("")
+                .socialLinks(Collections.emptyList())
+                .profileCard(new Dtos.ProfileCardDTO(Collections.emptyList()))
+                .build();
+    }
+
+    /** Frozen account as seen by others — nickname only. */
+    static Dtos.UserDTO frozenPublicProfile(Credentials c, UserProfile p) {
+        return Dtos.UserDTO.builder()
+                .id(p.getId())
+                .nickname(p.getNickname())
+                .frozen(true)
+                .activated(c.getActivated())
+                .role(c.getRole().name())
+                .build();
+    }
 
     private static Dtos.UserDTO join(Credentials c, UserProfile p) {
         return Dtos.UserDTO.builder()

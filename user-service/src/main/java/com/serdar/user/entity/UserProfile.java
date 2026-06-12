@@ -31,4 +31,16 @@ public class UserProfile {
 
     @Column(length = 512)
     private String profileImageUrl;
+
+    @Column(length = 180, nullable = false)
+    @Builder.Default
+    private String bio = "";
+
+    @Column(name = "social_links_json", columnDefinition = "TEXT", nullable = false)
+    @Builder.Default
+    private String socialLinksJson = "[]";
+
+    @Column(name = "profile_card_json", columnDefinition = "TEXT", nullable = false)
+    @Builder.Default
+    private String profileCardJson = "{\"widgets\":[]}";
 }

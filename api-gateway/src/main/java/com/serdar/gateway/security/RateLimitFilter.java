@@ -59,7 +59,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @Value("${app.rate-limit.messaging-group-photo.capacity}") long messagingGroupPhotoCapacity,
             @Value("${app.rate-limit.messaging-group-photo.window-seconds}") long messagingGroupPhotoWindowSeconds,
             @Value("${app.rate-limit.chat-send.capacity}") long chatSendCapacity,
-            @Value("${app.rate-limit.chat-send.window-seconds}") long chatSendWindowSeconds
+            @Value("${app.rate-limit.chat-send.window-seconds}") long chatSendWindowSeconds,
+            @Value("${app.rate-limit.profile-settings-write.capacity:30}") long profileSettingsWriteCapacity,
+            @Value("${app.rate-limit.profile-settings-write.window-seconds:60}") long profileSettingsWriteWindowSeconds
     ) {
         this.limiter = limiter;
         this.trustProxyHeaders = trustProxyHeaders;
@@ -95,7 +97,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 regex("messaging-group-write", HttpMethod.DELETE, "^/api/messaging-groups/[^/]+(/members/[^/]+)?$",
                         messagingGroupWriteCapacity, messagingGroupWriteWindowSeconds),
                 regex("chat-send",     HttpMethod.POST, "^/api/chat/conversations/[^/]+/send$",
-                        chatSendCapacity,        chatSendWindowSeconds)
+                        chatSendCapacity,        chatSendWindowSeconds),
+                exact("profile-settings-write", HttpMethod.PUT, "/api/user/profile-settings",
+                        profileSettingsWriteCapacity, profileSettingsWriteWindowSeconds)
         );
     }
 

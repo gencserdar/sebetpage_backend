@@ -66,6 +66,9 @@ app:
     chat-send:
       capacity: ${RATE_LIMIT_CHAT_SEND_CAPACITY}
       window-seconds: ${RATE_LIMIT_CHAT_SEND_WINDOW_SECONDS}
+    profile-settings-write:
+      capacity: ${RATE_LIMIT_PROFILE_SETTINGS_WRITE_CAPACITY:30}
+      window-seconds: ${RATE_LIMIT_PROFILE_SETTINGS_WRITE_WINDOW_SECONDS:60}
 
 # net.devh gRPC client endpoints. Hosts are env-driven so the same artifact
 # runs locally (loopback), in docker-compose (service names), or in k8s (DNS).

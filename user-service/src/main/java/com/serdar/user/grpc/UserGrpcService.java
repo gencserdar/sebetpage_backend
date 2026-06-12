@@ -2,6 +2,7 @@ package com.serdar.user.grpc;
 
 import com.serdar.common.GrpcErrors;
 import com.serdar.common.ServiceException;
+import com.serdar.common.grpc.GatewayUserContext;
 import com.serdar.proto.common.BoolResponse;
 import com.serdar.proto.common.Empty;
 import com.serdar.proto.common.IdList;
@@ -15,6 +16,7 @@ import com.serdar.user.entity.UserProfile;
 import com.serdar.user.service.BlockService;
 import com.serdar.user.service.FriendService;
 import com.serdar.user.service.ProfileService;
+import com.serdar.user.service.ProfileVisibilityService;
 import com.serdar.user.service.SearchService;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +34,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     private final BlockService blockService;
     private final SearchService searchService;
     private final AuthClient authClient;
+    private final ProfileVisibilityService profileVisibility;
 
     // ---- profile -----------------------------------------------------------
 
@@ -46,7 +49,17 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void getProfile(IdRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
-        guard(out, () -> { out.onNext(toProto(profileService.getById(req.getId()))); out.onCompleted(); });
+        guard(out, () -> {
+            UserProfile p = profileService.getById(req.getId());
+            Long viewerId = GatewayUserContext.currentViewerId();
+            profileVisibility.assertProfileAccessible(req.getId(), viewerId);
+            if (profileVisibility.showFullProfile(req.getId(), viewerId)) {
+                out.onNext(toProto(p));
+            } else {
+                out.onNext(frozenPublicProto(p));
+            }
+            out.onCompleted();
+        });
     }
 
     @Override
@@ -56,7 +69,17 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void getProfileByNickname(StringRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
-        guard(out, () -> { out.onNext(toProto(profileService.getByNickname(req.getValue()))); out.onCompleted(); });
+        guard(out, () -> {
+            UserProfile p = profileService.getByNickname(req.getValue());
+            Long viewerId = GatewayUserContext.currentViewerId();
+            profileVisibility.assertProfileAccessible(p.getId(), viewerId);
+            if (profileVisibility.showFullProfile(p.getId(), viewerId)) {
+                out.onNext(toProto(p));
+            } else {
+                out.onNext(frozenPublicProto(p));
+            }
+            out.onCompleted();
+        });
     }
 
     @Override
@@ -106,6 +129,34 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     public void syncProfileEmail(ChangeEmailRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
         guard(out, () -> {
             out.onNext(toProto(profileService.syncProfileEmail(req.getUserId(), req.getNewEmail())));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void getProfileSettings(IdRequest req, StreamObserver<ProfileSettings> out) {
+        guard(out, () -> {
+            Long viewerId = GatewayUserContext.currentViewerId();
+            profileVisibility.assertProfileAccessible(req.getId(), viewerId);
+            if (!profileVisibility.showFullProfile(req.getId(), viewerId)) {
+                out.onNext(emptySettings(req.getId()));
+                out.onCompleted();
+                return;
+            }
+            out.onNext(toSettingsProto(profileService.getProfileSettings(req.getId())));
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void updateProfileSettings(UpdateProfileSettingsRequest req, StreamObserver<ProfileSettings> out) {
+        guard(out, () -> {
+            UserProfile p = profileService.updateProfileSettings(
+                    req.getUserId(),
+                    req.getBio(),
+                    req.getSocialLinksJson(),
+                    req.getProfileCardJson());
+            out.onNext(toSettingsProto(p));
             out.onCompleted();
         });
     }
@@ -273,6 +324,22 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     // ---- conversion helpers ------------------------------------------------
 
+    private static com.serdar.proto.user.UserProfile frozenPublicProto(UserProfile p) {
+        return com.serdar.proto.user.UserProfile.newBuilder()
+                .setId(p.getId())
+                .setNickname(ns(p.getNickname()))
+                .build();
+    }
+
+    private static ProfileSettings emptySettings(long userId) {
+        return ProfileSettings.newBuilder()
+                .setUserId(userId)
+                .setBio("")
+                .setSocialLinksJson("[]")
+                .setProfileCardJson("{\"widgets\":[]}")
+                .build();
+    }
+
     private static com.serdar.proto.user.UserProfile toProto(UserProfile p) {
         return com.serdar.proto.user.UserProfile.newBuilder()
                 .setId(p.getId())
@@ -284,6 +351,19 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
                 .setActivated(true)
                 .setRole("USER")
                 .build();
+    }
+
+    private static ProfileSettings toSettingsProto(UserProfile p) {
+        return ProfileSettings.newBuilder()
+                .setUserId(p.getId())
+                .setBio(ns(p.getBio()))
+                .setSocialLinksJson(blankToDefault(p.getSocialLinksJson(), "[]"))
+                .setProfileCardJson(blankToDefault(p.getProfileCardJson(), "{\"widgets\":[]}"))
+                .build();
+    }
+
+    private static String blankToDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
     }
 
     private com.serdar.proto.user.FriendRequest toProto(FriendRequest r) {

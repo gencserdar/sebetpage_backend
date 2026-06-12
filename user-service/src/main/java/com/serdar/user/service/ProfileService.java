@@ -110,4 +110,21 @@ public class ProfileService {
         p.setEmail(newEmail);
         return repo.save(p);
     }
+
+    public UserProfile getProfileSettings(long userId) {
+        return getById(userId);
+    }
+
+    @Transactional
+    public UserProfile updateProfileSettings(
+            long userId,
+            String bio,
+            String socialLinksJson,
+            String profileCardJson) {
+        UserProfile p = getById(userId);
+        p.setBio(ProfileSettingsJson.sanitizeBio(bio));
+        p.setSocialLinksJson(ProfileSettingsJson.normalizeSocialLinksJson(socialLinksJson));
+        p.setProfileCardJson(ProfileSettingsJson.normalizeProfileCardJson(profileCardJson));
+        return repo.save(p);
+    }
 }

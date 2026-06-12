@@ -52,7 +52,9 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.user.UserService/CancelRequest", new ActorRule("canceller_id", false)),
             Map.entry("com.serdar.proto.user.UserService/Block", new ActorRule("blocker_id", false)),
             Map.entry("com.serdar.proto.user.UserService/Unblock", new ActorRule("blocker_id", false)),
-            Map.entry("com.serdar.proto.user.UserService/SearchUsers", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/SyncProfileEmail", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/UpdateProfileSettings", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/BlockStatus", new ActorRule("caller_id", false)),
 
             // community-service
             Map.entry("com.serdar.proto.community.CommunityService/CreateCommunity", new ActorRule("creator_id", false)),

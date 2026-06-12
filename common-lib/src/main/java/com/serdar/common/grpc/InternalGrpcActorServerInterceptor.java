@@ -1,6 +1,7 @@
 package com.serdar.common.grpc;
 
 import com.google.protobuf.Message;
+import io.grpc.Context;
 import io.grpc.ForwardingServerCallListener;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -25,6 +26,21 @@ public class InternalGrpcActorServerInterceptor implements ServerInterceptor {
         return new ForwardingServerCallListener.SimpleForwardingServerCallListener<>(delegate) {
             @Override
             public void onMessage(ReqT message) {
+                Long gatewayUserId = InternalGrpcAuth.parseGatewayUserId(headers);
+                if (gatewayUserId == null) {
+                    dispatch(message);
+                    return;
+                }
+                Context ctx = Context.current().withValue(GatewayUserContext.VIEWER_ID, gatewayUserId);
+                Context previous = ctx.attach();
+                try {
+                    dispatch(message);
+                } finally {
+                    ctx.detach(previous);
+                }
+            }
+
+            private void dispatch(ReqT message) {
                 if (message instanceof Message proto) {
                     GrpcGatewayActorRules.ruleFor(fullMethod).ifPresent(rule -> {
                         Long gatewayUserId = InternalGrpcAuth.parseGatewayUserId(headers);
