@@ -157,12 +157,14 @@ services:
     depends_on:
       chat-db: { condition: service_healthy }
       user-service: { condition: service_started }
+      auth-service: { condition: service_started }
       rabbitmq: { condition: service_healthy }
     env_file:
       - .env
     environment:
       DB_URL: jdbc:mysql://chat-db:3306/chat_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       USER_SERVICE_GRPC: static://user-service:9102
+      AUTH_SERVICE_GRPC: static://auth-service:9101
       RABBITMQ_HOST: rabbitmq
     expose: ["${CHAT_HTTP_PORT}", "${CHAT_GRPC_PORT}"]
 

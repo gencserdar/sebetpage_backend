@@ -39,6 +39,9 @@ public class UserController {
         long viewerId = CurrentUser.require().id();
         UserProfile p = users.byId(id);
         Credentials c = auth.byId(id);
+        if (viewerId != id && c.getFrozen()) {
+            return ResponseEntity.notFound().build();
+        }
         if (viewerId == id) {
             return ResponseEntity.ok(join(c, p));
         }
@@ -50,6 +53,9 @@ public class UserController {
         UserProfile p = users.byNickname(nickname);
         Credentials c = auth.byId(p.getId());
         long viewerId = CurrentUser.require().id();
+        if (viewerId != p.getId() && c.getFrozen()) {
+            return ResponseEntity.notFound().build();
+        }
         if (viewerId == p.getId()) {
             return ResponseEntity.ok(join(c, p));
         }
@@ -145,6 +151,20 @@ public class UserController {
         return ResponseEntity.ok(Map.of("profileImageUrl", p.getProfileImageUrl()));
     }
 
+    @PostMapping("/freeze")
+    public ResponseEntity<?> freeze() {
+        long id = CurrentUser.require().id();
+        auth.freezeAccount(id);
+        return ResponseEntity.ok(Map.of("status", "frozen"));
+    }
+
+    @PostMapping("/unfreeze")
+    public ResponseEntity<?> unfreeze() {
+        long id = CurrentUser.require().id();
+        auth.unfreezeAccount(id);
+        return ResponseEntity.ok(Map.of("status", "active"));
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static Dtos.UserDTO join(Credentials c, UserProfile p) {
@@ -156,6 +176,7 @@ public class UserController {
                 .surname(p.getSurname())
                 .profileImageUrl(p.getProfileImageUrl())
                 .activated(c.getActivated())
+                .frozen(c.getFrozen())
                 .role(c.getRole().name())
                 .build();
     }

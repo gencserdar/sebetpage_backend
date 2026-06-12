@@ -1,5 +1,6 @@
 package com.serdar.chat.service;
 
+import com.serdar.chat.client.AuthClient;
 import com.serdar.chat.client.UserClient;
 import com.serdar.chat.config.ChatLimits;
 import com.serdar.chat.entity.Conversation;
@@ -34,6 +35,7 @@ public class ChatDomainService {
     private final MessageRepository messages;
     private final AesGcm aes;
     private final UserClient userClient;
+    private final AuthClient authClient;
     private final EventBroker broker;
     private final ChatLimits limits;
 
@@ -41,6 +43,9 @@ public class ChatDomainService {
 
     @Transactional
     public Message send(long conversationId, long senderId, String plaintext) {
+        if (authClient.isFrozen(senderId)) {
+            throw ServiceException.forbidden("Account frozen");
+        }
         String content = limits.requireValidMessage(plaintext);
         Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
@@ -232,7 +237,14 @@ public class ChatDomainService {
         return participants.findByUserIdAndDeletedAtIsNull(userId).stream()
                 .map(p -> conversations.findByIdAndDeletedAtIsNull(p.getConversationId()).orElse(null))
                 .filter(Objects::nonNull)
+                .filter(c -> !shouldHideDirectConversation(c, userId))
                 .toList();
+    }
+
+    private boolean shouldHideDirectConversation(Conversation c, long userId) {
+        if (c.getType() != Conversation.Type.DIRECT) return false;
+        long other = c.getUserAId().equals(userId) ? c.getUserBId() : c.getUserAId();
+        return authClient.isFrozen(other);
     }
 
     public MessagingGroupDetail messagingGroupDetail(long conversationId, long requesterId) {
@@ -394,7 +406,8 @@ public class ChatDomainService {
     public ChatEvent presenceSnapshotFor(long userId) {
         ChatEvent.Builder b = ChatEvent.newBuilder().setType("PRESENCE_SNAPSHOT");
         for (long id : presenceAudienceFor(userId)) {
-            b.addPresenceSnapshot(PresenceEntry.newBuilder().setUserId(id).setOnline(broker.isOnline(id)));
+            boolean online = broker.isOnline(id) && !authClient.isFrozen(id);
+            b.addPresenceSnapshot(PresenceEntry.newBuilder().setUserId(id).setOnline(online));
         }
         return b.build();
     }
@@ -456,6 +469,9 @@ public class ChatDomainService {
     }
 
     public void broadcastPresence(long userId, boolean online) {
+        if (authClient.isFrozen(userId)) {
+            online = false;
+        }
         ChatEvent evt = ChatEvent.newBuilder()
                 .setType("PRESENCE_UPDATE")
                 .setSubjectUserId(userId)

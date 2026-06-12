@@ -60,6 +60,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                     .setNickname(r.credential().getNickname())
                     .setRole(toProto(r.credential().getRole()))
                     .setRefreshCookieAgeSeconds(r.cookieAge())
+                    .setFrozen(Boolean.TRUE.equals(r.credential().getFrozen()))
                     .build());
             out.onCompleted();
         });
@@ -77,6 +78,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                     .setNickname(r.credential().getNickname())
                     .setRole(toProto(r.credential().getRole()))
                     .setRefreshCookieAgeSeconds(r.cookieAge())
+                    .setFrozen(Boolean.TRUE.equals(r.credential().getFrozen()))
                     .build());
             out.onCompleted();
         });
@@ -149,7 +151,8 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                     .setEmail(v.emailAddr())
                     .setNickname(v.nickname())
                     .setRole(toProto(v.role()))
-                    .setSessionId(v.sessionId());
+                    .setSessionId(v.sessionId())
+                    .setFrozen(v.frozen());
         }
         out.onNext(b.build()); out.onCompleted();
     }
@@ -233,6 +236,24 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         });
     }
 
+    @Override
+    public void freezeAccount(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.freezeAccount(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void unfreezeAccount(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.unfreezeAccount(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private static Credentials toProto(Credential c) {
@@ -242,6 +263,7 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
                 .setNickname(c.getNickname())
                 .setRole(toProto(c.getRole()))
                 .setActivated(Boolean.TRUE.equals(c.getActivated()))
+                .setFrozen(Boolean.TRUE.equals(c.getFrozen()))
                 .build();
     }
 

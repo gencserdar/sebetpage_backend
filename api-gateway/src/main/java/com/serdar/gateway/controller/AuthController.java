@@ -71,7 +71,7 @@ public class AuthController {
         AuthResponse r = auth.login(req.getEmail(), req.getPassword(), req.isRememberMe());
         writeRefreshCookie(resp, r.getRefreshToken(), r.getRefreshCookieAgeSeconds());
         clearLegacyAccessCookie(resp);
-        return ResponseEntity.ok(new Dtos.AuthResponse(r.getAccessToken()));
+        return ResponseEntity.ok(new Dtos.AuthResponse(r.getAccessToken(), r.getFrozen()));
     }
 
     @PostMapping("/refresh")
@@ -83,7 +83,7 @@ public class AuthController {
         // the next /refresh call uses a token that actually matches the DB row.
         writeRefreshCookie(resp, r.getRefreshToken(), r.getRefreshCookieAgeSeconds());
         clearLegacyAccessCookie(resp);
-        return ResponseEntity.ok(new Dtos.AuthResponse(r.getAccessToken()));
+        return ResponseEntity.ok(new Dtos.AuthResponse(r.getAccessToken(), r.getFrozen()));
     }
 
     @PostMapping("/logout")

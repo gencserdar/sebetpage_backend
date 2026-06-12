@@ -1,6 +1,7 @@
 package com.serdar.user.client;
 
 import com.serdar.proto.auth.*;
+import com.serdar.proto.common.IdRequest;
 import com.serdar.proto.common.StringRequest;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.springframework.stereotype.Component;
@@ -30,5 +31,9 @@ public class AuthClient {
 
     public void updateNickname(long userId, String newNickname) {
         stub.updateNickname(UpdateNicknameRequest.newBuilder().setUserId(userId).setNewNickname(newNickname).build());
+    }
+
+    public boolean isFrozen(long userId) {
+        return stub.getCredentialsById(IdRequest.newBuilder().setId(userId).build()).getFrozen();
     }
 }

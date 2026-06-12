@@ -8,6 +8,6 @@ package com.serdar.gateway.security;
  * access token at login time. It lets single-device logout target exactly one
  * row without an additional cookie or DB lookup.
  */
-public record AuthenticatedUser(long id, String email, String nickname, String role, long sessionId) {
+public record AuthenticatedUser(long id, String email, String nickname, String role, long sessionId, boolean frozen) {
     public String roleAuthority() { return "ROLE_" + role; }
 }

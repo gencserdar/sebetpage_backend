@@ -1,0 +1,3 @@
+ALTER TABLE credentials
+    ADD COLUMN frozen BIT NOT NULL DEFAULT 0,
+    ADD COLUMN frozen_at DATETIME(6) NULL;

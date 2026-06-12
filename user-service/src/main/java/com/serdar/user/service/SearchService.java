@@ -1,5 +1,6 @@
 package com.serdar.user.service;
 
+import com.serdar.user.client.AuthClient;
 import com.serdar.user.entity.UserProfile;
 import com.serdar.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class SearchService {
     private final UserProfileRepository users;
     private final BlockService blockService;
     private final FriendService friendService;
+    private final AuthClient authClient;
 
     public record UserSearchResult(UserProfile profile, int mutualCount) {}
 
@@ -34,6 +36,7 @@ public class SearchService {
 
         return users.search(keyword).stream()
                 .filter(u -> !exclusions.contains(u.getId()))
+                .filter(u -> !authClient.isFrozen(u.getId()))
                 .map(u -> {
                     Set<Long> theirFriends = Set.copyOf(friendService.listFriendIds(u.getId()));
                     int mutual = (int) theirFriends.stream().filter(myFriends::contains).count();

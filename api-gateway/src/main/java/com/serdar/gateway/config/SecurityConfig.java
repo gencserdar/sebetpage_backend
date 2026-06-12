@@ -1,5 +1,6 @@
 package com.serdar.gateway.config;
 
+import com.serdar.gateway.security.FrozenAccountFilter;
 import com.serdar.gateway.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import java.util.stream.Collectors;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final FrozenAccountFilter frozenAccountFilter;
 
     /** Comma-separated list of CORS origins, sourced from ALLOWED_ORIGINS in
      *  `.env`. No default — the gateway refuses to boot without it, which
@@ -46,6 +48,7 @@ public class SecurityConfig {
                 // /refresh) from a genuine forbidden (don't retry).
                 .exceptionHandling(e -> e.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(frozenAccountFilter, JwtAuthFilter.class)
                 .build();
     }
 

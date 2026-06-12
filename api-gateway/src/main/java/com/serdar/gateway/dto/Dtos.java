@@ -17,6 +17,11 @@ public class Dtos {
     @Data @NoArgsConstructor @AllArgsConstructor
     public static class AuthResponse {
         private String token;
+        private boolean frozen;
+
+        public AuthResponse(String token) {
+            this(token, false);
+        }
     }
 
     @Data @NoArgsConstructor @AllArgsConstructor
@@ -46,6 +51,7 @@ public class Dtos {
         private String name;
         private String surname;
         private Boolean activated;
+        private Boolean frozen;
         private String role;
         private String nickname;
         private String profileImageUrl;

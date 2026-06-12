@@ -98,4 +98,12 @@ public class AuthClient {
         return stub.confirmPasswordChange(ConfirmCodeRequest.newBuilder()
                 .setUserId(userId).setCode(code).build()).getValue();
     }
+
+    public void freezeAccount(long userId) {
+        stub.freezeAccount(IdRequest.newBuilder().setId(userId).build());
+    }
+
+    public void unfreezeAccount(long userId) {
+        stub.unfreezeAccount(IdRequest.newBuilder().setId(userId).build());
+    }
 }

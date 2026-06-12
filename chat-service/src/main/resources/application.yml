@@ -57,6 +57,8 @@ grpc:
       negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
     user-service:
       address: ${USER_SERVICE_GRPC}
+    auth-service:
+      address: ${AUTH_SERVICE_GRPC}
 
 chat:
   aes:

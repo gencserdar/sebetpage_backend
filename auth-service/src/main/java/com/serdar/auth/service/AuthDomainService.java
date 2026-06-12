@@ -608,10 +608,34 @@ public class AuthDomainService {
      * without a separate DB round-trip.
      */
     public record ValidationResult(boolean valid, long userId, String emailAddr,
-                                   String nickname, Role role, long sessionId) {
+                                   String nickname, Role role, long sessionId, boolean frozen) {
         public static ValidationResult invalid() {
-            return new ValidationResult(false, 0, "", "", null, 0);
+            return new ValidationResult(false, 0, "", "", null, 0, false);
         }
+    }
+
+    public boolean isFrozen(long userId) {
+        return repo.findById(userId).map(c -> Boolean.TRUE.equals(c.getFrozen())).orElse(false);
+    }
+
+    @Transactional
+    public void freezeAccount(long userId) {
+        Credential c = repo.findById(userId)
+                .orElseThrow(() -> ServiceException.notFound("User not found"));
+        if (Boolean.TRUE.equals(c.getFrozen())) return;
+        c.setFrozen(true);
+        c.setFrozenAt(LocalDateTime.now(ZoneOffset.UTC));
+        repo.save(c);
+        revokeAllSessions(userId);
+    }
+
+    @Transactional
+    public void unfreezeAccount(long userId) {
+        Credential c = repo.findById(userId)
+                .orElseThrow(() -> ServiceException.notFound("User not found"));
+        c.setFrozen(false);
+        c.setFrozenAt(null);
+        repo.save(c);
     }
 
     /** Stateless token validation — used by the gateway on every request. */
@@ -628,7 +652,7 @@ public class AuthDomainService {
             if (c == null || !c.getEmail().equals(claims.getSubject()))
                 return ValidationResult.invalid();
             return new ValidationResult(true, c.getId(), c.getEmail(),
-                    c.getNickname(), c.getRole(), sid);
+                    c.getNickname(), c.getRole(), sid, Boolean.TRUE.equals(c.getFrozen()));
         } catch (Exception e) {
             return ValidationResult.invalid();
         }

@@ -91,4 +91,12 @@ public class Credential {
 
     @Column(name = "pending_password_attempts")
     private Integer pendingPasswordAttempts;
+
+    /** When true the account is hibernating — hidden everywhere except as offline in existing groups. */
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean frozen = false;
+
+    @Column(name = "frozen_at")
+    private LocalDateTime frozenAt;
 }

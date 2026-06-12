@@ -1,6 +1,7 @@
 package com.serdar.user.service;
 
 import com.serdar.common.ServiceException;
+import com.serdar.user.client.AuthClient;
 import com.serdar.user.entity.FriendRequest;
 import com.serdar.user.entity.Friendship;
 import com.serdar.user.entity.UserProfile;
@@ -30,6 +31,7 @@ public class FriendService {
     private final FriendRequestRepository requests;
     private final UserProfileRepository users;
     private final BlockService blockService;
+    private final AuthClient authClient;
 
     // --- friendships --------------------------------------------------------
 
@@ -41,6 +43,7 @@ public class FriendService {
         List<Friendship> list = friendships.findFriendshipsOfUser(userId);
         return list.stream()
                 .map(f -> f.getUser1Id().equals(userId) ? f.getUser2Id() : f.getUser1Id())
+                .filter(id -> !authClient.isFrozen(id))
                 .map(id -> users.findById(id).orElse(null))
                 .filter(java.util.Objects::nonNull)
                 .toList();
@@ -49,6 +52,7 @@ public class FriendService {
     public List<Long> listFriendIds(long userId) {
         return friendships.findFriendshipsOfUser(userId).stream()
                 .map(f -> f.getUser1Id().equals(userId) ? f.getUser2Id() : f.getUser1Id())
+                .filter(id -> !authClient.isFrozen(id))
                 .toList();
     }
 
@@ -60,6 +64,9 @@ public class FriendService {
     public Map<String, Object> friendStatus(long callerId, String otherNickname) {
         UserProfile other = users.findByNickname(otherNickname)
                 .orElseThrow(() -> ServiceException.notFound("User not found"));
+        if (other.getId() != callerId && authClient.isFrozen(other.getId())) {
+            throw ServiceException.notFound("User not found");
+        }
         if (other.getId() == callerId) return Map.of("status", "self", "otherUserId", other.getId());
 
         if (areFriends(callerId, other.getId()))
@@ -81,9 +88,15 @@ public class FriendService {
     /** @return map with status + optional requestId + toUserId */
     @Transactional
     public Map<String, Object> sendRequest(long fromId, String toNickname) {
+        if (authClient.isFrozen(fromId)) {
+            throw ServiceException.forbidden("Account frozen");
+        }
         UserProfile to = users.findByNickname(toNickname)
                 .orElseThrow(() -> ServiceException.notFound("User not found"));
         long toId = to.getId();
+        if (authClient.isFrozen(toId)) {
+            throw ServiceException.notFound("User not found");
+        }
         if (fromId == toId) throw ServiceException.invalid("You can't send a request to yourself");
         if (blockService.eitherWay(fromId, toId)) throw ServiceException.forbidden("Blocked");
         if (areFriends(fromId, toId)) throw ServiceException.conflict("Already friends");
@@ -111,11 +124,15 @@ public class FriendService {
     }
 
     public List<FriendRequest> incoming(long userId) {
-        return requests.findByToUserIdAndStatus(userId, FriendRequest.Status.PENDING);
+        return requests.findByToUserIdAndStatus(userId, FriendRequest.Status.PENDING).stream()
+                .filter(r -> !authClient.isFrozen(r.getFromUserId()))
+                .toList();
     }
 
     public List<FriendRequest> outgoing(long userId) {
-        return requests.findByFromUserIdAndStatus(userId, FriendRequest.Status.PENDING);
+        return requests.findByFromUserIdAndStatus(userId, FriendRequest.Status.PENDING).stream()
+                .filter(r -> !authClient.isFrozen(r.getToUserId()))
+                .toList();
     }
 
     @Transactional

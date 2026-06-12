@@ -8,6 +8,7 @@ import com.serdar.proto.common.IdList;
 import com.serdar.proto.common.IdRequest;
 import com.serdar.proto.common.StringRequest;
 import com.serdar.proto.user.*;
+import com.serdar.user.client.AuthClient;
 import com.serdar.user.entity.FriendRequest;
 import com.serdar.user.entity.UserBlock;
 import com.serdar.user.entity.UserProfile;
@@ -30,6 +31,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     private final FriendService friendService;
     private final BlockService blockService;
     private final SearchService searchService;
+    private final AuthClient authClient;
 
     // ---- profile -----------------------------------------------------------
 
@@ -217,6 +219,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         guard(out, () -> {
             BlockList.Builder b = BlockList.newBuilder();
             for (UserBlock block : blockService.myBlocks(req.getId())) {
+                if (authClient.isFrozen(block.getBlockedId())) continue;
                 UserProfile target = profileService.getById(block.getBlockedId());
                 b.addBlocks(Block.newBuilder()
                         .setId(block.getId())

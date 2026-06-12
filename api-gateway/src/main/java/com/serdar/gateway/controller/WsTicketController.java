@@ -19,6 +19,12 @@ public class WsTicketController {
     @PostMapping("/api/ws-ticket")
     public ResponseEntity<?> issue(HttpServletRequest request) {
         var me = CurrentUser.require();
+        if (me.frozen()) {
+            return ResponseEntity.status(403).body(Map.of(
+                    "error", "Account frozen",
+                    "code", "ACCOUNT_FROZEN"
+            ));
+        }
         var ticket = tickets.issue(
                 me.id(),
                 me.email(),

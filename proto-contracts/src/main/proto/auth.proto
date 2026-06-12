@@ -49,6 +49,10 @@ service AuthService {
   rpc ConfirmEmailChange    (ConfirmCodeRequest)           returns (ConfirmEmailChangeResponse);
   rpc RequestPasswordChange (RequestPasswordChangeRequest) returns (com.serdar.proto.common.Empty);
   rpc ConfirmPasswordChange (ConfirmCodeRequest)           returns (com.serdar.proto.common.BoolResponse);
+
+  // Account freeze — user-initiated hibernation; revokes all sessions on freeze.
+  rpc FreezeAccount   (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
+  rpc UnfreezeAccount (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
 }
 
 enum Role {
@@ -63,6 +67,7 @@ message Credentials {
   string nickname = 3;
   Role   role = 4;
   bool   activated = 5;
+  bool   frozen = 6;
 }
 
 message RegisterRequest {
@@ -94,6 +99,7 @@ message AuthResponse {
   string nickname = 5;
   Role   role = 6;
   int32  refresh_cookie_age_seconds = 7;
+  bool   frozen = 8;
 }
 
 message RefreshRequest {
@@ -146,6 +152,7 @@ message ValidateTokenResponse {
   string nickname = 4;
   Role   role = 5;
   int64  session_id = 6; // active session — used by gateway for targeted logout
+  bool   frozen = 7;
 }
 
 message UpdateEmailRequest {
