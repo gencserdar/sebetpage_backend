@@ -5,6 +5,7 @@ import com.serdar.community.client.UserClient;
 import com.serdar.community.entity.Community;
 import com.serdar.community.entity.CommunityInvite;
 import com.serdar.community.entity.CommunityMember;
+import com.serdar.community.search.CommunitySearchIndexService;
 import com.serdar.community.repository.CommunityInviteRepository;
 import com.serdar.community.repository.CommunityMemberRepository;
 import com.serdar.community.repository.CommunityRepository;
@@ -23,6 +24,7 @@ public class CommunityDomainService {
     private final CommunityMemberRepository members;
     private final CommunityInviteRepository invites;
     private final UserClient users;
+    private final CommunitySearchIndexService searchIndex;
 
     @Transactional
     public Community createCommunity(long creatorId, String name, String description) {
@@ -44,6 +46,7 @@ public class CommunityDomainService {
                 .role(CommunityMember.Role.ADMIN)
                 .build());
 
+        searchIndex.index(c);
         return c;
     }
 
@@ -102,7 +105,14 @@ public class CommunityDomainService {
 
     public List<Community> search(String keyword) {
         if (keyword == null || keyword.isBlank()) return List.of();
-        return communities.findByNameContainingIgnoreCase(keyword);
+        try {
+            return searchIndex.searchIds(keyword, 50).stream()
+                    .map(id -> communities.findById(id).orElse(null))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+        } catch (Exception e) {
+            return communities.findByNameContainingIgnoreCase(keyword);
+        }
     }
 
     public record CommunityWithRole(Community community, CommunityMember.Role role) {}

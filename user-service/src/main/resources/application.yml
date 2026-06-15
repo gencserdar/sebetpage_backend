@@ -20,6 +20,11 @@ spring:
     multipart:
       max-file-size: ${MAX_UPLOAD_SIZE}
       max-request-size: ${MAX_UPLOAD_SIZE}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
 
 server:
   port: ${USER_HTTP_PORT}
@@ -36,6 +41,13 @@ management:
 app:
   environment: ${APP_ENV}
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  upload:
+    storage-dir: ${UPLOAD_STORAGE_DIR}
+    public-base-url: ${UPLOAD_PUBLIC_BASE_URL}
+  opensearch:
+    host: ${OPENSEARCH_HOST}
+    port: ${OPENSEARCH_PORT}
+    scheme: ${OPENSEARCH_SCHEME}
 
 grpc:
   server:
@@ -48,11 +60,3 @@ grpc:
       negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
     auth-service:
       address: ${AUTH_SERVICE_GRPC}
-
-aws:
-  accessKey: ${AWS_ACCESS_KEY}
-  secretKey: ${AWS_SECRET_KEY}
-  region: ${AWS_REGION}
-  s3:
-    bucketName: ${AWS_BUCKET_NAME}
-    publicBaseUrl: ${AWS_S3_PUBLIC_BASE_URL}

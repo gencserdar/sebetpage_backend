@@ -11,7 +11,7 @@ import java.util.UUID;
  *      number — we never trust the client-claimed Content-Type, since a
  *      caller can lie ("image/png" while sending an ELF binary, a script,
  *      etc).
- *   2. Generate a server-controlled filename for S3 so attacker-supplied
+ *   2. Generate a server-controlled relative path so attacker-supplied
  *      filenames (which can contain "../", null bytes, weird unicode)
  *      never end up in our key namespace.
  *

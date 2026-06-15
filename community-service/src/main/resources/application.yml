@@ -32,6 +32,10 @@ management:
 app:
   environment: ${APP_ENV}
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  opensearch:
+    host: ${OPENSEARCH_HOST}
+    port: ${OPENSEARCH_PORT}
+    scheme: ${OPENSEARCH_SCHEME}
 
 grpc:
   server:

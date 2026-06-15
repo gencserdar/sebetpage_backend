@@ -2,7 +2,7 @@ package com.serdar.chat.grpc;
 
 import com.serdar.chat.entity.Conversation;
 import com.serdar.chat.entity.ConversationParticipant;
-import com.serdar.chat.entity.Message;
+import com.serdar.chat.model.Message;
 import com.serdar.chat.service.ChatDomainService;
 import com.serdar.chat.service.ConversationService;
 import com.serdar.chat.service.EventBroker;

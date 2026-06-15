@@ -34,6 +34,8 @@ app:
   trust-proxy-headers: ${TRUST_PROXY_HEADERS}
   ws-ticket-ttl-seconds: ${WS_TICKET_TTL_SECONDS}
   internal-grpc-token: ${INTERNAL_GRPC_TOKEN}
+  upload:
+    storage-dir: ${UPLOAD_STORAGE_DIR}
   rate-limit:
     login:
       capacity: ${RATE_LIMIT_LOGIN_CAPACITY}

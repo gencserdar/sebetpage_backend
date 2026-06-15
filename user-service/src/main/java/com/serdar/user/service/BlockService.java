@@ -1,6 +1,7 @@
 package com.serdar.user.service;
 
 import com.serdar.common.ServiceException;
+import com.serdar.user.cache.BlockCacheService;
 import com.serdar.user.entity.FriendRequest;
 import com.serdar.user.entity.Friendship;
 import com.serdar.user.entity.UserBlock;
@@ -12,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +31,7 @@ public class BlockService {
     private final UserBlockRepository blocks;
     private final FriendshipRepository friendships;
     private final FriendRequestRepository requests;
+    private final BlockCacheService cache;
 
     @Transactional
     public void block(long blockerId, long blockedId) {
@@ -39,6 +43,7 @@ public class BlockService {
                 .blockedId(blockedId)
                 .createdAt(LocalDateTime.now())
                 .build());
+        cache.warmBlock(blockerId, blockedId);
 
         // Tear down friendship if present.
         friendships.findByUsers(blockerId, blockedId).ifPresent(friendships::delete);
@@ -53,18 +58,25 @@ public class BlockService {
     @Transactional
     public void unblock(long blockerId, long blockedId) {
         blocks.deleteByBlockerIdAndBlockedId(blockerId, blockedId);
+        cache.evict(blockerId, blockedId);
     }
 
     public boolean blockedByMe(long me, long other) {
-        return blocks.existsByBlockerIdAndBlockedId(me, other);
+        if (me == other) return false;
+        return blockedByMeIdSet(me).contains(other);
     }
 
     public boolean blocksMe(long me, long other) {
-        return blocks.existsByBlockerIdAndBlockedId(other, me);
+        if (me == other) return false;
+        return new HashSet<>(whoBlocksMe(me)).contains(other);
     }
 
     public boolean eitherWay(long a, long b) {
         return blockedByMe(a, b) || blocksMe(a, b);
+    }
+
+    public java.util.Set<Long> blockedByMeIdSet(long userId) {
+        return cache.blockedByMeIds(userId, () -> blocks.findAllByBlockerId(userId));
     }
 
     public List<UserBlock> myBlocks(long blockerId) {
@@ -72,7 +84,7 @@ public class BlockService {
     }
 
     public List<Long> whoBlocksMe(long userId) {
-        return blocks.findAllBlockerIdsOf(userId);
+        return new ArrayList<>(cache.whoBlocksMeIds(userId, () -> blocks.findAllBlockerIdsOf(userId)));
     }
 
     /** Convenience delete used when friendship removal already handled elsewhere. */

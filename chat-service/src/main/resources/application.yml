@@ -16,6 +16,17 @@ spring:
     enabled: true
     baseline-on-migrate: true
     baseline-version: 1
+  cassandra:
+    keyspace-name: ${CASSANDRA_KEYSPACE}
+    contact-points: ${CASSANDRA_CONTACT_POINTS}
+    port: ${CASSANDRA_PORT}
+    local-datacenter: ${CASSANDRA_DATACENTER}
+    schema-action: create_if_not_exists
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
   rabbitmq:
     host: ${RABBITMQ_HOST}
     port: ${RABBITMQ_PORT}

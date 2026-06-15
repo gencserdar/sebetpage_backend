@@ -2,6 +2,7 @@ package com.serdar.user.service;
 
 import com.serdar.common.ServiceException;
 import com.serdar.user.client.AuthClient;
+import com.serdar.user.search.UserSearchIndexService;
 import com.serdar.user.entity.UserProfile;
 import com.serdar.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,26 +13,29 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProfileService {
 
-    private static final String DEFAULT_AVATAR =
-            "https://sebetpage-pp-images.s3.us-east-1.amazonaws.com/default_pp.png";
+    private static final String DEFAULT_AVATAR = "";
 
     private final UserProfileRepository repo;
     private final AuthClient authClient;
-    private final S3Service s3;
+    private final LocalImageStorageService imageStorage;
+    private final UserSearchIndexService searchIndex;
 
     @Transactional
     public UserProfile createProfile(long userId, String email, String nickname, String name, String surname) {
         // Defensive: if someone hits CreateProfile twice (e.g. a retried registration
         // call) we return the existing profile instead of blowing up on PK collision.
-        return repo.findById(userId).orElseGet(() ->
-                repo.save(UserProfile.builder()
+        return repo.findById(userId).orElseGet(() -> {
+                UserProfile saved = repo.save(UserProfile.builder()
                         .id(userId)
                         .email(email)
                         .nickname(nickname)
                         .name(name)
                         .surname(surname)
                         .profileImageUrl(DEFAULT_AVATAR)
-                        .build()));
+                        .build());
+                searchIndex.index(saved);
+                return saved;
+        });
     }
 
     public UserProfile getById(long id) {
@@ -52,17 +56,17 @@ public class ProfileService {
         // bytes against known image magic numbers, derive a fresh
         // server-controlled filename. Stops two attack classes:
         //   - mislabeled files (script/exe with image/png Content-Type)
-        //   - path-traversal / unicode-in-filename ending up as the S3 key
+        //   - path-traversal / unicode-in-filename ending up in storage path
         ImageValidator.Validated v = ImageValidator.validate(bytes, userId);
         UserProfile p = getById(userId);
-        String url = s3.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
+        String url = imageStorage.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
         p.setProfileImageUrl(url);
         return repo.save(p);
     }
 
     public String uploadImage(long uploaderId, byte[] bytes, String contentType, String filename) {
         ImageValidator.Validated v = ImageValidator.validate(bytes, uploaderId);
-        return s3.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
+        return imageStorage.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
     }
 
     @Transactional
@@ -70,7 +74,9 @@ public class ProfileService {
         UserProfile p = getById(userId);
         if (name != null)    p.setName(name);
         if (surname != null) p.setSurname(surname);
-        return repo.save(p);
+        UserProfile saved = repo.save(p);
+        searchIndex.index(saved);
+        return saved;
     }
 
     @Transactional
@@ -83,7 +89,9 @@ public class ProfileService {
         authClient.updateNickname(userId, newNickname);
         UserProfile p = getById(userId);
         p.setNickname(newNickname);
-        return repo.save(p);
+        UserProfile saved = repo.save(p);
+        searchIndex.index(saved);
+        return saved;
     }
 
     @Transactional

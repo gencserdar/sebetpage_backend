@@ -81,15 +81,13 @@ services:
       timeout: 5s
       retries: 10
 
-  # Redis — used by api-gateway for distributed rate limiting. A single
-  # instance is fine for dev; in production point REDIS_HOST at your
-  # managed cluster (ElastiCache, Redis Cloud, etc.) and set REDIS_PASSWORD.
+  # Redis — rate limiting (gateway), unread counts (chat), block cache (user).
   redis:
     image: redis:7.2-alpine
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD required}
-      --maxmemory 128mb
+      --maxmemory 256mb
       --maxmemory-policy allkeys-lru
     ports: ["127.0.0.1:${REDIS_PORT}:6379"]
     volumes: [redis_data:/data]
@@ -98,6 +96,36 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  cassandra:
+    image: cassandra:4.1
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 100M
+    ports: ["127.0.0.1:${CASSANDRA_PORT}:9042"]
+    volumes: [cassandra_data:/var/lib/cassandra]
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ports: ["127.0.0.1:${OPENSEARCH_PORT}:9200"]
+    volumes: [opensearch_data:/usr/share/opensearch/data]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 45s
 
   # --------- services ------------------------------------------------------
   # Each service:
@@ -129,11 +157,17 @@ services:
     depends_on:
       user-db: { condition: service_healthy }
       auth-service: { condition: service_started }
+      redis: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
     env_file:
       - .env
     environment:
       DB_URL: jdbc:mysql://user-db:3306/user_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       AUTH_SERVICE_GRPC: static://auth-service:9101
+      REDIS_HOST: redis
+      OPENSEARCH_HOST: opensearch
+    volumes:
+      - uploads_data:/data/uploads
     expose: ["${USER_HTTP_PORT}", "${USER_GRPC_PORT}"]
 
   community-service:
@@ -143,11 +177,13 @@ services:
     depends_on:
       community-db: { condition: service_healthy }
       user-service: { condition: service_started }
+      opensearch: { condition: service_healthy }
     env_file:
       - .env
     environment:
       DB_URL: jdbc:mysql://community-db:3306/community_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       USER_SERVICE_GRPC: static://user-service:9102
+      OPENSEARCH_HOST: opensearch
     expose: ["${COMMUNITY_HTTP_PORT}", "${COMMUNITY_GRPC_PORT}"]
 
   chat-service:
@@ -159,6 +195,8 @@ services:
       user-service: { condition: service_started }
       auth-service: { condition: service_started }
       rabbitmq: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      cassandra: { condition: service_healthy }
     env_file:
       - .env
     environment:
@@ -166,6 +204,8 @@ services:
       USER_SERVICE_GRPC: static://user-service:9102
       AUTH_SERVICE_GRPC: static://auth-service:9101
       RABBITMQ_HOST: rabbitmq
+      REDIS_HOST: redis
+      CASSANDRA_CONTACT_POINTS: cassandra
     expose: ["${CHAT_HTTP_PORT}", "${CHAT_GRPC_PORT}"]
 
   # Async mail dispatcher. Pulls jobs off mail.queue and hands them to SMTP.
@@ -201,6 +241,8 @@ services:
       COMMUNITY_GRPC_HOST: community-service
       CHAT_GRPC_HOST: chat-service
       REDIS_HOST: redis
+    volumes:
+      - uploads_data:/data/uploads:ro
     ports: ["${GATEWAY_PORT}:${GATEWAY_PORT}"]
 
 volumes:
@@ -210,3 +252,6 @@ volumes:
   chat_data:
   rabbitmq_data:
   redis_data:
+  cassandra_data:
+  opensearch_data:
+  uploads_data:

@@ -3,12 +3,13 @@ package com.serdar.chat.service;
 import com.serdar.chat.client.AuthClient;
 import com.serdar.chat.client.UserClient;
 import com.serdar.chat.config.ChatLimits;
+import com.serdar.chat.cache.UnreadCacheService;
 import com.serdar.chat.entity.Conversation;
 import com.serdar.chat.entity.ConversationParticipant;
-import com.serdar.chat.entity.Message;
+import com.serdar.chat.model.Message;
 import com.serdar.chat.repository.ConversationParticipantRepository;
 import com.serdar.chat.repository.ConversationRepository;
-import com.serdar.chat.repository.MessageRepository;
+import com.serdar.chat.repository.MessageStore;
 import com.serdar.common.AesGcm;
 import com.serdar.common.ServiceException;
 import com.serdar.proto.chat.ChatEvent;
@@ -32,7 +33,8 @@ public class ChatDomainService {
 
     private final ConversationRepository conversations;
     private final ConversationParticipantRepository participants;
-    private final MessageRepository messages;
+    private final MessageStore messages;
+    private final UnreadCacheService unreadCache;
     private final AesGcm aes;
     private final UserClient userClient;
     private final AuthClient authClient;
@@ -58,6 +60,7 @@ public class ChatDomainService {
         }
         AesGcm.Enc enc = aes.encrypt(content, AesGcm.aad(conversationId, senderId));
         Message m = messages.save(Message.builder()
+                .id(MessageIdGenerator.nextId())
                 .conversationId(conversationId)
                 .senderId(senderId)
                 .contentCipherB64(enc.cipherB64())
@@ -84,12 +87,17 @@ public class ChatDomainService {
                             .build());
             // unread count bump for everyone other than the sender, unless they muted the chat.
             if (p.getUserId() != m.getSenderId() && !Boolean.TRUE.equals(p.getMuted())) {
-                long unread = countVisibleUnread(c, p.getUserId(), p.getLastReadAt());
+                if (!group || !shouldHideGroupMessageFrom(p.getUserId(), m.getSenderId())) {
+                    unreadCache.increment(p.getUserId(), c.getId());
+                }
+                int unread = unreadCache.getConversationUnread(
+                        p.getUserId(), c.getId(),
+                        () -> (int) countVisibleUnread(c, p.getUserId(), p.getLastReadAt()));
                 broker.sendTo(p.getUserId(),
                         ChatEvent.newBuilder()
                                 .setType("UNREAD_COUNT_UPDATE")
                                 .setConversationId(c.getId())
-                                .setUnreadCount((int) unread)
+                                .setUnreadCount(unread)
                                 .build());
             }
         }
@@ -155,10 +163,12 @@ public class ChatDomainService {
                 .orElseThrow(() -> ServiceException.forbidden("Not a participant"));
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         me.setLastReadAt(now);
-        participants.save(me);
+        participants.saveAndFlush(me);
 
-        long unread = countVisibleUnread(c, readerId, now);
-        int totalUnread = totalUnreadFor(readerId);
+        unreadCache.clearConversation(readerId, conversationId);
+        int totalUnread = computeTotalUnreadFromStore(readerId);
+
+        long unread = 0;
 
         ChatEvent readEvt = ChatEvent.newBuilder()
                 .setType("READ")
@@ -182,12 +192,17 @@ public class ChatDomainService {
     }
 
     public int totalUnreadFor(long userId) {
+        return unreadCache.getTotalUnread(userId, () -> computeTotalUnreadFromStore(userId));
+    }
+
+    private int computeTotalUnreadFromStore(long userId) {
         int total = 0;
         Set<Long> hidden = userClient.blockedByMeIds(userId);
         for (ConversationParticipant p : participants.findByUserIdAndDeletedAtIsNull(userId)) {
             if (Boolean.TRUE.equals(p.getMuted())) continue;
             total += visibleUnreadForParticipant(p, userId, hidden);
         }
+        unreadCache.warmTotal(userId, total);
         return total;
     }
 
@@ -200,10 +215,13 @@ public class ChatDomainService {
                 per.put(p.getConversationId(), 0);
                 continue;
             }
-            int n = visibleUnreadForParticipant(p, userId, hidden);
+            int n = unreadCache.getConversationUnread(
+                    userId, p.getConversationId(),
+                    () -> visibleUnreadForParticipant(p, userId, hidden));
             total += n;
             per.put(p.getConversationId(), n);
         }
+        unreadCache.warmTotal(userId, total);
         return new UnreadCounts(total, per);
     }
 
@@ -354,6 +372,7 @@ public class ChatDomainService {
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, audience);
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_LEFT", conversationId, Set.of(targetUserId));
         notifyUnreadAfterCommit(targetUserId, conversationId, 0, totalUnreadFor(targetUserId));
+        unreadCache.clearConversation(targetUserId, conversationId);
         return messagingGroupDetail(conversationId, requesterId);
     }
 
@@ -373,6 +392,7 @@ public class ChatDomainService {
             conversations.delete(c);
             notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_DELETED", conversationId, Set.of(requesterId));
             notifyUnreadAfterCommit(requesterId, conversationId, 0, totalUnreadFor(requesterId));
+            unreadCache.clearConversation(requesterId, conversationId);
             return;
         }
 
@@ -386,6 +406,7 @@ public class ChatDomainService {
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_UPDATED", conversationId, activeUserIds(conversationId));
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_LEFT", conversationId, Set.of(requesterId));
         notifyUnreadAfterCommit(requesterId, conversationId, 0, totalUnreadFor(requesterId));
+        unreadCache.clearConversation(requesterId, conversationId);
     }
 
     @Transactional
@@ -397,7 +418,10 @@ public class ChatDomainService {
         messages.deleteByConversationId(conversationId);
         participants.deleteByConversationId(conversationId);
         conversations.delete(c);
-        audience.forEach(userId -> notifyUnreadAfterCommit(userId, conversationId, 0, totalUnreadFor(userId)));
+        audience.forEach(userId -> {
+            notifyUnreadAfterCommit(userId, conversationId, 0, totalUnreadFor(userId));
+            unreadCache.clearConversation(userId, conversationId);
+        });
         notifyMessagingGroupEventAfterCommit("MESSAGING_GROUP_DELETED", conversationId, audience);
     }
 
@@ -702,6 +726,7 @@ public class ChatDomainService {
     private Message saveSystemMessage(Conversation c, String plaintext) {
         AesGcm.Enc enc = aes.encrypt(plaintext, AesGcm.aad(c.getId(), 0));
         Message m = messages.save(Message.builder()
+                .id(MessageIdGenerator.nextId())
                 .conversationId(c.getId())
                 .senderId(0L)
                 .contentCipherB64(enc.cipherB64())
