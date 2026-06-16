@@ -71,6 +71,18 @@ app:
     profile-settings-write:
       capacity: ${RATE_LIMIT_PROFILE_SETTINGS_WRITE_CAPACITY:30}
       window-seconds: ${RATE_LIMIT_PROFILE_SETTINGS_WRITE_WINDOW_SECONDS:60}
+    profile-photo:
+      capacity: ${RATE_LIMIT_PROFILE_PHOTO_CAPACITY:10}
+      window-seconds: ${RATE_LIMIT_PROFILE_PHOTO_WINDOW_SECONDS:300}
+    search:
+      capacity: ${RATE_LIMIT_SEARCH_CAPACITY:60}
+      window-seconds: ${RATE_LIMIT_SEARCH_WINDOW_SECONDS:60}
+    friend-write:
+      capacity: ${RATE_LIMIT_FRIEND_WRITE_CAPACITY:30}
+      window-seconds: ${RATE_LIMIT_FRIEND_WRITE_WINDOW_SECONDS:60}
+    block-write:
+      capacity: ${RATE_LIMIT_BLOCK_WRITE_CAPACITY:20}
+      window-seconds: ${RATE_LIMIT_BLOCK_WRITE_WINDOW_SECONDS:60}
 
 # net.devh gRPC client endpoints. Hosts are env-driven so the same artifact
 # runs locally (loopback), in docker-compose (service names), or in k8s (DNS).
@@ -102,7 +114,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health
   endpoint:
     health:
       show-details: never

@@ -25,7 +25,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.net.URI;
 import java.util.*;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -86,7 +88,11 @@ public class ChatDomainService {
                             .setMessage(msg)
                             .build());
             // unread count bump for everyone other than the sender, unless they muted the chat.
-            if (p.getUserId() != m.getSenderId() && !Boolean.TRUE.equals(p.getMuted())) {
+            // System messages (senderId <= 0) never affect unread badges.
+            if (p.getUserId() != m.getSenderId()
+                    && !Boolean.TRUE.equals(p.getMuted())
+                    && m.getSenderId() != null
+                    && m.getSenderId() > 0) {
                 if (!group || !shouldHideGroupMessageFrom(p.getUserId(), m.getSenderId())) {
                     unreadCache.increment(p.getUserId(), c.getId());
                 }
@@ -226,6 +232,7 @@ public class ChatDomainService {
     }
 
     public ReadState readState(long conversationId, long callerId) {
+        assertActiveMember(conversationId, callerId);
         Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
                 .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
         if (c.getType() != Conversation.Type.DIRECT)
@@ -300,7 +307,7 @@ public class ChatDomainService {
         }
         if (updateImageUrl) {
             requirePermission(c, requester, Permission.CHANGE_PHOTO);
-            c.setImageUrl(blankToNull(imageUrl));
+            c.setImageUrl(validateGroupImageUrl(imageUrl));
         }
 
         conversations.save(c);
@@ -735,6 +742,38 @@ public class ChatDomainService {
                 .build());
         broadcastMessage(c, m, plaintext);
         return m;
+    }
+
+    private static final Pattern UPLOAD_OBJECT_KEY =
+            Pattern.compile("^/uploads/[a-zA-Z0-9][a-zA-Z0-9._-]*$");
+
+    private static String validateGroupImageUrl(String imageUrl) {
+        String trimmed = blankToNull(imageUrl);
+        if (trimmed == null) {
+            return null;
+        }
+        if (trimmed.contains("..")) {
+            throw ServiceException.invalid("Invalid image URL");
+        }
+        String path = uploadPath(trimmed);
+        if (!UPLOAD_OBJECT_KEY.matcher(path).matches()) {
+            throw ServiceException.invalid("Image URL must point to an uploaded file under /uploads/");
+        }
+        return trimmed;
+    }
+
+    private static String uploadPath(String url) {
+        if (url.startsWith("/uploads/")) {
+            return url;
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            try {
+                return URI.create(url).getPath();
+            } catch (IllegalArgumentException e) {
+                throw ServiceException.invalid("Invalid image URL");
+            }
+        }
+        throw ServiceException.invalid("Image URL must point to an uploaded file under /uploads/");
     }
 
     private static String blankToNull(String value) {

@@ -1,8 +1,10 @@
 package com.serdar.gateway.ws;
 
+import com.serdar.common.config.ProductionTransportValidator;
 import com.serdar.gateway.client.AuthClient;
 import com.serdar.proto.auth.ValidateTokenResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -25,6 +27,9 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     private final AuthClient auth;
     private final WsTicketService tickets;
 
+    @Value("${app.environment}")
+    private String environment;
+
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
@@ -36,6 +41,10 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
                 attributes.put("email", t.email());
                 return true;
             }).orElse(false);
+        }
+
+        if (ProductionTransportValidator.isProductionLike(environment)) {
+            return false;
         }
 
         String token = resolveBearerToken(request);

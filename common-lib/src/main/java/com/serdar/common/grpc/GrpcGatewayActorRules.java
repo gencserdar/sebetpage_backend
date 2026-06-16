@@ -34,6 +34,7 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.chat.ChatService/DeleteMessagingGroup", new ActorRule("requester_id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/UpdateMessagingGroupParticipant", new ActorRule("requester_id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/GetPresenceSnapshot", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.chat.ChatService/SubscribeEvents", new ActorRule("id", false)),
 
             // user-service
             Map.entry("com.serdar.proto.user.UserService/UpdateProfilePhoto", new ActorRule("user_id", false)),
@@ -55,6 +56,23 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.user.UserService/SyncProfileEmail", new ActorRule("user_id", false)),
             Map.entry("com.serdar.proto.user.UserService/UpdateProfileSettings", new ActorRule("user_id", false)),
             Map.entry("com.serdar.proto.user.UserService/BlockStatus", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/IsBlockedEitherWay", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/MyBlocks", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.user.UserService/SearchUsers", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/GetProfileSettings", new ActorRule("id", false)),
+
+            // auth-service
+            Map.entry("com.serdar.proto.auth.AuthService/LogoutAll", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/ChangePassword", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/RequestEmailChange", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/ConfirmEmailChange", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/RequestPasswordChange", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/ConfirmPasswordChange", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/UpdateEmail", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/UpdateNickname", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/FreezeAccount", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/UnfreezeAccount", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/AbortRegistration", new ActorRule("id", false)),
 
             // community-service
             Map.entry("com.serdar.proto.community.CommunityService/CreateCommunity", new ActorRule("creator_id", false)),

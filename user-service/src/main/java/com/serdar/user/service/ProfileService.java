@@ -59,9 +59,14 @@ public class ProfileService {
         //   - path-traversal / unicode-in-filename ending up in storage path
         ImageValidator.Validated v = ImageValidator.validate(bytes, userId);
         UserProfile p = getById(userId);
+        String previousUrl = p.getProfileImageUrl();
         String url = imageStorage.upload(v.bytes(), v.canonicalContentType(), v.safeFilename());
         p.setProfileImageUrl(url);
-        return repo.save(p);
+        UserProfile saved = repo.save(p);
+        if (previousUrl != null && !previousUrl.isBlank() && !previousUrl.equals(url)) {
+            imageStorage.deleteByPublicUrl(previousUrl);
+        }
+        return saved;
     }
 
     public String uploadImage(long uploaderId, byte[] bytes, String contentType, String filename) {

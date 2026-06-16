@@ -61,7 +61,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @Value("${app.rate-limit.chat-send.capacity}") long chatSendCapacity,
             @Value("${app.rate-limit.chat-send.window-seconds}") long chatSendWindowSeconds,
             @Value("${app.rate-limit.profile-settings-write.capacity:30}") long profileSettingsWriteCapacity,
-            @Value("${app.rate-limit.profile-settings-write.window-seconds:60}") long profileSettingsWriteWindowSeconds
+            @Value("${app.rate-limit.profile-settings-write.window-seconds:60}") long profileSettingsWriteWindowSeconds,
+            @Value("${app.rate-limit.profile-photo.capacity:10}") long profilePhotoCapacity,
+            @Value("${app.rate-limit.profile-photo.window-seconds:300}") long profilePhotoWindowSeconds,
+            @Value("${app.rate-limit.search.capacity:60}") long searchCapacity,
+            @Value("${app.rate-limit.search.window-seconds:60}") long searchWindowSeconds,
+            @Value("${app.rate-limit.friend-write.capacity:30}") long friendWriteCapacity,
+            @Value("${app.rate-limit.friend-write.window-seconds:60}") long friendWriteWindowSeconds,
+            @Value("${app.rate-limit.block-write.capacity:20}") long blockWriteCapacity,
+            @Value("${app.rate-limit.block-write.window-seconds:60}") long blockWriteWindowSeconds
     ) {
         this.limiter = limiter;
         this.trustProxyHeaders = trustProxyHeaders;
@@ -77,6 +85,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 exact("request-email", HttpMethod.POST, "/api/user/request-email-change",
                         requestEmailCapacity,    requestEmailWindowSeconds),
                 exact("request-pass",  HttpMethod.POST, "/api/user/request-password-change",
+                        requestPasswordCapacity, requestPasswordWindowSeconds),
+                exact("confirm-email", HttpMethod.POST, "/api/user/confirm-email-change",
+                        requestEmailCapacity, requestEmailWindowSeconds),
+                exact("confirm-pass",  HttpMethod.POST, "/api/user/confirm-password-change",
                         requestPasswordCapacity, requestPasswordWindowSeconds),
                 exact("activate",      HttpMethod.POST, "/api/auth/activate",
                         activateCapacity,        activateWindowSeconds),
@@ -99,7 +111,23 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 regex("chat-send",     HttpMethod.POST, "^/api/chat/conversations/[^/]+/send$",
                         chatSendCapacity,        chatSendWindowSeconds),
                 exact("profile-settings-write", HttpMethod.PUT, "/api/user/profile-settings",
-                        profileSettingsWriteCapacity, profileSettingsWriteWindowSeconds)
+                        profileSettingsWriteCapacity, profileSettingsWriteWindowSeconds),
+                exact("profile-photo", HttpMethod.POST, "/api/user/profile-photo",
+                        profilePhotoCapacity, profilePhotoWindowSeconds),
+                exact("search", HttpMethod.GET, "/api/search",
+                        searchCapacity, searchWindowSeconds),
+                exact("friend-write", HttpMethod.POST, "/api/friend-requests/send",
+                        friendWriteCapacity, friendWriteWindowSeconds),
+                regex("friend-write", HttpMethod.POST, "^/api/friend-requests/[^/]+/respond$",
+                        friendWriteCapacity, friendWriteWindowSeconds),
+                regex("friend-write", HttpMethod.DELETE, "^/api/friend-requests/[^/]+/cancel$",
+                        friendWriteCapacity, friendWriteWindowSeconds),
+                regex("friend-write", HttpMethod.DELETE, "^/api/friends/remove/[^/]+$",
+                        friendWriteCapacity, friendWriteWindowSeconds),
+                regex("block-write", HttpMethod.POST, "^/api/blocks/[^/]+$",
+                        blockWriteCapacity, blockWriteWindowSeconds),
+                regex("block-write", HttpMethod.DELETE, "^/api/blocks/[^/]+$",
+                        blockWriteCapacity, blockWriteWindowSeconds)
         );
     }
 

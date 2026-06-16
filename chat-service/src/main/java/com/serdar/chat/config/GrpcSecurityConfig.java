@@ -1,6 +1,7 @@
 package com.serdar.chat.config;
 
 import com.serdar.common.grpc.InternalGrpcClientInterceptor;
+import com.serdar.common.config.ProductionSecretsValidator;
 import com.serdar.common.config.ProductionTransportValidator;
 import com.serdar.common.grpc.InternalGrpcActorServerInterceptor;
 import com.serdar.common.grpc.InternalGrpcServerInterceptor;
@@ -19,11 +20,15 @@ public class GrpcSecurityConfig {
     @Value("${app.environment}") private String environment;
     @Value("${grpc.client.GLOBAL.negotiationType}") private String clientNegotiationType;
     @Value("${grpc.server.security.enabled}") private boolean serverSecurityEnabled;
+    @Value("${app.internal-grpc-token}") private String internalGrpcToken;
+    @Value("${chat.aes.key}") private String chatAesKey;
 
     @PostConstruct
-    void validateProductionTransport() {
+    void validateProductionSecurity() {
         ProductionTransportValidator.requireSecureGrpcInProd(
                 environment, clientNegotiationType, serverSecurityEnabled);
+        ProductionSecretsValidator.requireSecret(environment, "INTERNAL_GRPC_TOKEN", internalGrpcToken);
+        ProductionSecretsValidator.requireSecret(environment, "CHAT_AES_KEY_BASE64", chatAesKey);
     }
 
     @Bean

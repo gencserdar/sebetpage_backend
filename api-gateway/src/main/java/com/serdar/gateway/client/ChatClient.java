@@ -1,5 +1,6 @@
 package com.serdar.gateway.client;
 
+import com.serdar.common.grpc.GrpcActorContext;
 import com.serdar.proto.chat.*;
 import com.serdar.proto.common.IdRequest;
 import io.grpc.Context;
@@ -142,7 +143,8 @@ public class ChatClient {
 
     public Context.CancellableContext subscribeEvents(long userId, StreamObserver<ChatEvent> observer) {
         Context.CancellableContext ctx = Context.current().withCancellation();
-        ctx.run(() -> async.subscribeEvents(IdRequest.newBuilder().setId(userId).build(), observer));
+        ctx.run(() -> GrpcActorContext.runAs(userId,
+                () -> async.subscribeEvents(IdRequest.newBuilder().setId(userId).build(), observer)));
         return ctx;
     }
 }

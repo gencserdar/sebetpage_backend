@@ -1,5 +1,6 @@
 package com.serdar.gateway.config;
 
+import com.serdar.common.config.ProductionTransportValidator;
 import com.serdar.gateway.security.FrozenAccountFilter;
 import com.serdar.gateway.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
@@ -11,6 +12,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -33,12 +35,25 @@ public class SecurityConfig {
     @Value("${app.allowed-origins}")
     private String allowedOriginsCsv;
 
+    @Value("${app.environment}")
+    private String environment;
+
     @Bean
     public SecurityFilterChain filter(HttpSecurity http) throws Exception {
-        return http
+        http
                 .csrf(c -> c.disable())
                 .cors(c -> c.configurationSource(corsSource()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .headers(h -> {
+                    h.contentTypeOptions(c -> {});
+                    h.frameOptions(f -> f.deny());
+                    h.referrerPolicy(r -> r.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN));
+                    if (ProductionTransportValidator.isProductionLike(environment)) {
+                        h.httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31_536_000));
+                    }
+                })
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/api/auth/**", "/ws/**", "/actuator/health", "/uploads/**").permitAll()
                         .anyRequest().authenticated())
@@ -48,8 +63,8 @@ public class SecurityConfig {
                 // /refresh) from a genuine forbidden (don't retry).
                 .exceptionHandling(e -> e.authenticationEntryPoint(unauthorizedEntryPoint()))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(frozenAccountFilter, JwtAuthFilter.class)
-                .build();
+                .addFilterAfter(frozenAccountFilter, JwtAuthFilter.class);
+        return http.build();
     }
 
     @Bean
@@ -72,7 +87,12 @@ public class SecurityConfig {
         CorsConfiguration cfg = new CorsConfiguration();
         cfg.setAllowedOrigins(origins);
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        cfg.setAllowedHeaders(List.of("*"));
+        cfg.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With"));
         cfg.setExposedHeaders(List.of("x-new-token"));
         cfg.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();

@@ -1,5 +1,6 @@
 package com.serdar.gateway.controller;
 
+import com.serdar.common.config.ProductionTransportValidator;
 import com.serdar.gateway.client.AuthClient;
 import com.serdar.gateway.client.UserClient;
 import com.serdar.gateway.dto.Dtos;
@@ -165,7 +166,7 @@ public class AuthController {
 
     private void clearRefreshCookie(HttpServletResponse resp) {
         ResponseCookie c = ResponseCookie.from("refreshToken", "")
-                .httpOnly(true).secure("prod".equals(env)).sameSite("Lax").path("/").maxAge(0).build();
+                .httpOnly(true).secure(ProductionTransportValidator.isProductionLike(env)).sameSite("Lax").path("/").maxAge(0).build();
         resp.addHeader(HttpHeaders.SET_COOKIE, c.toString());
     }
 
@@ -175,7 +176,7 @@ public class AuthController {
         // differ on their default when the attribute is missing.
         ResponseCookie c = ResponseCookie.from("refreshToken", token)
                 .httpOnly(true)
-                .secure("prod".equals(env))
+                .secure(ProductionTransportValidator.isProductionLike(env))
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(maxAge)
@@ -186,7 +187,7 @@ public class AuthController {
     private void clearLegacyAccessCookie(HttpServletResponse resp) {
         ResponseCookie c = ResponseCookie.from("jwt-token", "")
                 .httpOnly(true)
-                .secure("prod".equals(env))
+                .secure(ProductionTransportValidator.isProductionLike(env))
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)

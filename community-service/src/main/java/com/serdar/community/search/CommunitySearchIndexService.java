@@ -38,6 +38,7 @@ public class CommunitySearchIndexService {
         if (!exists) {
             client.indices().create(CreateIndexRequest.of(c -> c.index(INDEX).mappings(m -> m
                     .properties("id", p -> p.long_(l -> l))
+                    .properties("isPrivate", p -> p.boolean_(b -> b))
                     .properties("name", p -> p.text(t -> t.fields("keyword", f -> f.keyword(k -> k))))
                     .properties("description", p -> p.text(t -> t)))));
         }
@@ -62,6 +63,8 @@ public class CommunitySearchIndexService {
                 .query(query)), Map.class);
         List<Long> ids = new ArrayList<>();
         response.hits().hits().forEach(hit -> {
+            Map<String, Object> src = hit.source();
+            if (src != null && Boolean.TRUE.equals(src.get("isPrivate"))) return;
             Object id = hit.source() == null ? hit.id() : hit.source().get("id");
             if (id instanceof Number n) ids.add(n.longValue());
             else if (id != null) ids.add(Long.parseLong(id.toString()));
@@ -105,6 +108,7 @@ public class CommunitySearchIndexService {
         doc.put("id", c.getId());
         doc.put("name", c.getName());
         doc.put("description", c.getDescription());
+        doc.put("isPrivate", Boolean.TRUE.equals(c.getIsPrivate()));
         return doc;
     }
 }

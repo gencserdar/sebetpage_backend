@@ -2,6 +2,12 @@ package com.serdar.user.service;
 
 import com.serdar.common.ServiceException;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.Iterator;
 import java.util.UUID;
 
 /**
@@ -23,6 +29,8 @@ import java.util.UUID;
 public final class ImageValidator {
 
     public static final int MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+    public static final int MAX_PIXELS = 16_000_000;
+    public static final int MAX_DIMENSION = 4096;
 
     public record Validated(String canonicalContentType, String safeFilename, byte[] bytes) {}
 
@@ -37,6 +45,8 @@ public final class ImageValidator {
         String contentType = sniff(bytes);
         if (contentType == null)
             throw ServiceException.invalid("File doesn't look like a PNG/JPEG/GIF/WebP image");
+
+        rejectOversizedDimensions(bytes);
 
         String ext = switch (contentType) {
             case "image/png"  -> "png";
@@ -79,5 +89,33 @@ public final class ImageValidator {
             return "image/webp";
         }
         return null;
+    }
+
+    private static void rejectOversizedDimensions(byte[] bytes) {
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            if (in == null) {
+                throw ServiceException.invalid("Unreadable image");
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
+                throw ServiceException.invalid("Unreadable image");
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                if (width <= 0 || height <= 0
+                        || width > MAX_DIMENSION
+                        || height > MAX_DIMENSION
+                        || (long) width * height > MAX_PIXELS) {
+                    throw ServiceException.invalid("Image dimensions too large");
+                }
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
+            throw ServiceException.invalid("Unreadable image");
+        }
     }
 }

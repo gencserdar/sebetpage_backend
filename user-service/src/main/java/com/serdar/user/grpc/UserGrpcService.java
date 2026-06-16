@@ -64,7 +64,17 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
 
     @Override
     public void getProfileByEmail(StringRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
-        guard(out, () -> { out.onNext(toProto(profileService.getByEmail(req.getValue()))); out.onCompleted(); });
+        guard(out, () -> {
+            UserProfile p = profileService.getByEmail(req.getValue());
+            Long viewerId = GatewayUserContext.currentViewerId();
+            profileVisibility.assertProfileAccessible(p.getId(), viewerId);
+            if (profileVisibility.showFullProfile(p.getId(), viewerId)) {
+                out.onNext(toProto(p));
+            } else {
+                out.onNext(frozenPublicProto(p));
+            }
+            out.onCompleted();
+        });
     }
 
     @Override
@@ -120,8 +130,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     @Override
     public void changeEmail(ChangeEmailRequest req, StreamObserver<com.serdar.proto.user.UserProfile> out) {
         guard(out, () -> {
-            out.onNext(toProto(profileService.changeEmail(req.getUserId(), req.getNewEmail())));
-            out.onCompleted();
+            throw ServiceException.invalid("Direct email change is disabled; use confirm-email-change flow");
         });
     }
 

@@ -61,6 +61,8 @@ public class CommunityDomainService {
             throw ServiceException.forbidden("Only active members can invite");
         if (!users.exists(toUserId))
             throw ServiceException.notFound("Invitee not found");
+        if (users.isBlockedEitherWay(inviterId, toUserId))
+            throw ServiceException.forbidden("Cannot invite a blocked user");
         if (invites.existsByCommunityIdAndToUserIdAndStatus(communityId, toUserId, CommunityInvite.Status.PENDING))
             throw ServiceException.conflict("Invite already pending");
 
@@ -82,7 +84,7 @@ public class CommunityDomainService {
         if (inv.getStatus() != CommunityInvite.Status.PENDING)
             throw ServiceException.precondition("Already responded");
 
-        if (accept) {
+        if (accept && !members.existsByCommunityIdAndUserId(inv.getCommunityId(), inv.getToUserId())) {
             members.save(CommunityMember.builder()
                     .communityId(inv.getCommunityId())
                     .userId(inv.getToUserId())
@@ -108,10 +110,10 @@ public class CommunityDomainService {
         try {
             return searchIndex.searchIds(keyword, 50).stream()
                     .map(id -> communities.findById(id).orElse(null))
-                    .filter(java.util.Objects::nonNull)
+                    .filter(c -> c != null && !Boolean.TRUE.equals(c.getIsPrivate()))
                     .toList();
         } catch (Exception e) {
-            return communities.findByNameContainingIgnoreCase(keyword);
+            return communities.findByNameContainingIgnoreCaseAndIsPrivateFalse(keyword);
         }
     }
 

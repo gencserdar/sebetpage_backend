@@ -47,4 +47,24 @@ public class LocalImageStorageService {
         String base = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
         return base + "/" + safeRelativePath.replace('\\', '/');
     }
+
+    public void deleteByPublicUrl(String publicUrl) {
+        if (publicUrl == null || publicUrl.isBlank()) {
+            return;
+        }
+        String base = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+        if (!publicUrl.startsWith(base + "/")) {
+            return;
+        }
+        String relative = publicUrl.substring(base.length() + 1);
+        Path target = root.resolve(relative).normalize();
+        if (!target.startsWith(root)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException e) {
+            log.warn("Failed to delete old upload {}", target);
+        }
+    }
 }

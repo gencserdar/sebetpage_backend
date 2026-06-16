@@ -1,6 +1,7 @@
 package com.serdar.user.config;
 
 import com.serdar.common.grpc.InternalGrpcClientInterceptor;
+import com.serdar.common.config.ProductionSecretsValidator;
 import com.serdar.common.config.ProductionTransportValidator;
 import com.serdar.common.grpc.InternalGrpcActorServerInterceptor;
 import com.serdar.common.grpc.InternalGrpcServerInterceptor;
@@ -19,11 +20,13 @@ public class GrpcSecurityConfig {
     @Value("${app.environment}") private String environment;
     @Value("${grpc.client.GLOBAL.negotiationType}") private String clientNegotiationType;
     @Value("${grpc.server.security.enabled}") private boolean serverSecurityEnabled;
+    @Value("${app.internal-grpc-token}") private String internalGrpcToken;
 
     @PostConstruct
-    void validateProductionTransport() {
+    void validateProductionSecurity() {
         ProductionTransportValidator.requireSecureGrpcInProd(
                 environment, clientNegotiationType, serverSecurityEnabled);
+        ProductionSecretsValidator.requireSecret(environment, "INTERNAL_GRPC_TOKEN", internalGrpcToken);
     }
 
     @Bean

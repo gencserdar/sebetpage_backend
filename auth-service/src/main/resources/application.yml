@@ -58,6 +58,9 @@ grpc:
     security:
       enabled: ${GRPC_SERVER_SECURITY_ENABLED}
       client-auth: ${GRPC_SERVER_SECURITY_CLIENT_AUTH}
+  client:
+    GLOBAL:
+      negotiationType: ${GRPC_CLIENT_NEGOTIATION_TYPE}
 
 jwt:
   secret: ${JWT_SECRET}

@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface CommunityRepository extends JpaRepository<Community, Long> {
     List<Community> findByNameContainingIgnoreCase(String keyword);
+
+    List<Community> findByNameContainingIgnoreCaseAndIsPrivateFalse(String keyword);
 }

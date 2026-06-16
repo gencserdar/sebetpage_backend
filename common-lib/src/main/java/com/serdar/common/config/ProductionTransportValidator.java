@@ -18,7 +18,7 @@ public final class ProductionTransportValidator {
         }
     }
 
-    static boolean isProductionLike(String env) {
+    public static boolean isProductionLike(String env) {
         if (env == null) return false;
         String normalized = env.trim().toLowerCase();
         return normalized.equals("prod") || normalized.equals("production");
