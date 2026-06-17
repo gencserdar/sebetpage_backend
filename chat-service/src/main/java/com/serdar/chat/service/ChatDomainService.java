@@ -74,6 +74,92 @@ public class ChatDomainService {
         return m;
     }
 
+    @Transactional
+    public void deleteMessage(long conversationId, long messageId, long callerId, long createdAtMillis) {
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        assertActiveMember(conversationId, callerId);
+        Message m = messages.findMessage(conversationId, messageId, createdAtMillis)
+                .orElseThrow(() -> ServiceException.notFound("Message not found"));
+        if (m.getSenderId() == null || !m.getSenderId().equals(callerId)) {
+            throw ServiceException.forbidden("Not the sender");
+        }
+        messages.deleteMessage(conversationId, messageId, createdAtMillis);
+        broadcastMessageMutation(c, m, "MESSAGE_DELETED", "", true);
+    }
+
+    @Transactional
+    public com.serdar.proto.chat.ChatMessage editMessage(
+            long conversationId, long messageId, long callerId, long createdAtMillis, String plaintext) {
+        if (authClient.isFrozen(callerId)) {
+            throw ServiceException.forbidden("Account frozen");
+        }
+        String content = limits.requireValidMessage(plaintext);
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        assertActiveMember(conversationId, callerId);
+        Message m = messages.findMessage(conversationId, messageId, createdAtMillis)
+                .orElseThrow(() -> ServiceException.notFound("Message not found"));
+        if (m.getSenderId() == null || !m.getSenderId().equals(callerId)) {
+            throw ServiceException.forbidden("Not the sender");
+        }
+        AesGcm.Enc enc = aes.encrypt(content, AesGcm.aad(conversationId, callerId));
+        LocalDateTime editedAt = LocalDateTime.now(ZoneOffset.UTC);
+        messages.editMessage(conversationId, messageId, createdAtMillis,
+                enc.cipherB64(), enc.ivB64(), editedAt);
+        m.setContentCipherB64(enc.cipherB64());
+        m.setContentIvB64(enc.ivB64());
+        m.setEditedAt(editedAt);
+        com.serdar.proto.chat.ChatMessage proto = toProtoMessage(m, content);
+        broadcastMessageMutation(c, m, "MESSAGE_EDITED", content, false);
+        return proto;
+    }
+
+    public void notifyTyping(long conversationId, long userId) {
+        if (authClient.isFrozen(userId)) {
+            throw ServiceException.forbidden("Account frozen");
+        }
+        Conversation c = conversations.findByIdAndDeletedAtIsNull(conversationId)
+                .orElseThrow(() -> ServiceException.notFound("Conversation not found"));
+        assertActiveMember(conversationId, userId);
+        ChatEvent evt = ChatEvent.newBuilder()
+                .setType("TYPING")
+                .setConversationId(conversationId)
+                .setSubjectUserId(userId)
+                .build();
+        for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(c.getId())) {
+            if (p.getUserId() != userId) {
+                broker.sendTo(p.getUserId(), evt);
+            }
+        }
+    }
+
+    private void broadcastMessageMutation(Conversation c, Message m, String type, String plaintext, boolean deleted) {
+        com.serdar.proto.chat.ChatMessage.Builder msgBuilder = com.serdar.proto.chat.ChatMessage.newBuilder()
+                .setId(m.getId())
+                .setConversationId(m.getConversationId())
+                .setSenderId(m.getSenderId())
+                .setContent(plaintext)
+                .setCreatedAtMillis(m.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli())
+                .setDeleted(deleted);
+        if (m.getEditedAt() != null) {
+            msgBuilder.setEditedAtMillis(m.getEditedAt().toInstant(ZoneOffset.UTC).toEpochMilli());
+        }
+        com.serdar.proto.chat.ChatMessage msg = msgBuilder.build();
+        boolean group = c.getType() == Conversation.Type.MESSAGING_GROUP;
+        for (ConversationParticipant p : participants.findByConversationIdAndDeletedAtIsNull(c.getId())) {
+            if (group && shouldHideGroupMessageFrom(p.getUserId(), m.getSenderId())) {
+                continue;
+            }
+            broker.sendTo(p.getUserId(),
+                    ChatEvent.newBuilder()
+                            .setType(type)
+                            .setConversationId(c.getId())
+                            .setMessage(msg)
+                            .build());
+        }
+    }
+
     private void broadcastMessage(Conversation c, Message m, String plaintext) {
         com.serdar.proto.chat.ChatMessage msg = toProtoMessage(m, plaintext);
         boolean group = c.getType() == Conversation.Type.MESSAGING_GROUP;
@@ -781,13 +867,17 @@ public class ChatDomainService {
     }
 
     private com.serdar.proto.chat.ChatMessage toProtoMessage(Message m, String plaintext) {
-        return com.serdar.proto.chat.ChatMessage.newBuilder()
+        com.serdar.proto.chat.ChatMessage.Builder b = com.serdar.proto.chat.ChatMessage.newBuilder()
                 .setId(m.getId())
                 .setConversationId(m.getConversationId())
                 .setSenderId(m.getSenderId())
                 .setContent(plaintext)
                 .setCreatedAtMillis(m.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli())
-                .build();
+                .setDeleted(m.isDeleted());
+        if (m.getEditedAt() != null) {
+            b.setEditedAtMillis(m.getEditedAt().toInstant(ZoneOffset.UTC).toEpochMilli());
+        }
+        return b.build();
     }
 
     private void notifyMessagingGroupEventAfterCommit(String type, long conversationId, Set<Long> userIds) {

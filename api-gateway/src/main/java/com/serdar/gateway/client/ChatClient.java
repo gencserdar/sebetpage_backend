@@ -21,6 +21,34 @@ public class ChatClient {
         return blocking.sendMessage(SendMessageRequest.newBuilder()
                 .setConversationId(conversationId).setSenderId(senderId).setPlaintext(content).build());
     }
+
+    public void deleteMessage(long conversationId, long messageId, long callerId, long createdAtMillis) {
+        blocking.deleteMessage(DeleteMessageRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setMessageId(messageId)
+                .setCallerId(callerId)
+                .setCreatedAtMillis(createdAtMillis)
+                .build());
+    }
+
+    public ChatMessage editMessage(long conversationId, long messageId, long callerId,
+                                   long createdAtMillis, String content) {
+        return blocking.editMessage(EditMessageRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setMessageId(messageId)
+                .setCallerId(callerId)
+                .setCreatedAtMillis(createdAtMillis)
+                .setPlaintext(content)
+                .build());
+    }
+
+    public void notifyTyping(long conversationId, long userId) {
+        blocking.notifyTyping(TypingRequest.newBuilder()
+                .setConversationId(conversationId)
+                .setUserId(userId)
+                .build());
+    }
+
     public MessagePage getPage(long conversationId, long callerId, int page, int size) {
         return blocking.getPage(GetPageRequest.newBuilder()
                 .setConversationId(conversationId).setCallerId(callerId).setPage(page).setSize(size).build());

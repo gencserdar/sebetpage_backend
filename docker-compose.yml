@@ -84,6 +84,8 @@ services:
   # Redis — rate limiting (gateway), unread counts (chat), block cache (user).
   redis:
     image: redis:7.2-alpine
+    env_file:
+      - .env
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD required}
@@ -92,20 +94,24 @@ services:
     ports: ["127.0.0.1:${REDIS_PORT}:6379"]
     volumes: [redis_data:/data]
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   cassandra:
-    image: cassandra:4.1
+    # Bitnami free images moved to bitnamilegacy (Aug 2025). Pin a 4.1.x tag.
+    image: bitnamilegacy/cassandra:4.1.7
+    env_file:
+      - .env
     environment:
+      CASSANDRA_PASSWORD_SEEDER: yes
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 100M
     ports: ["127.0.0.1:${CASSANDRA_PORT}:9042"]
     volumes: [cassandra_data:/var/lib/cassandra]
     healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'describe cluster' || exit 1"]
+      test: ["CMD-SHELL", "cqlsh -u cassandra -p $$CASSANDRA_PASSWORD -e 'describe cluster' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 15
@@ -149,6 +155,12 @@ services:
       DB_URL: jdbc:mysql://auth-db:3306/auth_db?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
       RABBITMQ_HOST: rabbitmq
     expose: ["${AUTH_HTTP_PORT}", "${AUTH_GRPC_PORT}"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:$$AUTH_HTTP_PORT/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
 
   user-service:
     build:
@@ -193,7 +205,7 @@ services:
     depends_on:
       chat-db: { condition: service_healthy }
       user-service: { condition: service_started }
-      auth-service: { condition: service_started }
+      auth-service: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
       redis: { condition: service_healthy }
       cassandra: { condition: service_healthy }

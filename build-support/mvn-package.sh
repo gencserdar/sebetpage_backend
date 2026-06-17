@@ -9,15 +9,16 @@ fi
 
 attempt=1
 while [ "$attempt" -le 3 ]; do
-  echo "Maven package attempt $attempt/3: $MODULES" >&2
+  echo "[$(date -Iseconds)] Maven package attempt $attempt/3: $MODULES" >&2
   if mvn -B -pl "$MODULES" -am -DskipTests package; then
+    echo "[$(date -Iseconds)] Maven package succeeded: $MODULES" >&2
     exit 0
   fi
-  echo "Maven package attempt $attempt/3 failed, clearing partial gRPC artifacts..." >&2
+  echo "[$(date -Iseconds)] Maven package attempt $attempt/3 failed, clearing partial gRPC artifacts..." >&2
   rm -rf /root/.m2/repository/io/grpc 2>/dev/null || true
   if [ "$attempt" -eq 3 ]; then
     exit 1
   fi
-  sleep 30
+  sleep 5
   attempt=$((attempt + 1))
 done

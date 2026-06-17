@@ -42,6 +42,20 @@ public class AuthClient {
         stub.logoutAll(LogoutAllRequest.newBuilder().setUserId(userId).build());
     }
 
+    public SessionList listSessions(long userId, long currentSessionId) {
+        return stub.listSessions(ListSessionsRequest.newBuilder()
+                .setUserId(userId)
+                .setCurrentSessionId(currentSessionId)
+                .build());
+    }
+
+    public void revokeSession(long userId, long sessionId) {
+        stub.revokeSession(RevokeSessionRequest.newBuilder()
+                .setUserId(userId)
+                .setSessionId(sessionId)
+                .build());
+    }
+
     public boolean activate(String code) {
         return stub.activate(ActivateRequest.newBuilder().setActivationCode(code).build()).getValue();
     }

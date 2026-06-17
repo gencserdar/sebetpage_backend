@@ -7,9 +7,17 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Optional;
 
 public interface MessageStore {
     Message save(Message message);
+
+    Optional<Message> findMessage(long conversationId, long messageId, long createdAtMillis);
+
+    void deleteMessage(long conversationId, long messageId, long createdAtMillis);
+
+    void editMessage(long conversationId, long messageId, long createdAtMillis,
+                     String contentCipherB64, String contentIvB64, LocalDateTime editedAt);
 
     void deleteByConversationId(long conversationId);
 

@@ -5,7 +5,11 @@ import com.serdar.gateway.client.AuthClient;
 import com.serdar.gateway.client.UserClient;
 import com.serdar.gateway.dto.Dtos;
 import com.serdar.gateway.security.CurrentUser;
+import com.serdar.gateway.security.SessionRevocationCache;
+import com.serdar.gateway.ws.SessionRevocationBroadcaster;
 import com.serdar.proto.auth.AuthResponse;
+import com.serdar.proto.auth.SessionInfo;
+import com.serdar.proto.auth.SessionList;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -35,6 +39,8 @@ public class AuthController {
 
     private final AuthClient auth;
     private final UserClient users;
+    private final SessionRevocationCache revokedSessions;
+    private final SessionRevocationBroadcaster sessionEvents;
 
     @Value("${app.environment}") private String env;
     @Value("${frontend.base-url}") private String frontendBaseUrl;
@@ -115,14 +121,54 @@ public class AuthController {
         return ResponseEntity.ok("Logged out");
     }
 
+    @GetMapping("/sessions")
+    public ResponseEntity<?> listSessions() {
+        var user = CurrentUser.require();
+        SessionList sessions = auth.listSessions(user.id(), user.sessionId());
+        var rows = sessions.getSessionsList().stream()
+                .map(s -> Map.of(
+                        "id", s.getId(),
+                        "createdAtMillis", s.getCreatedAtMillis(),
+                        "expiresAtMillis", s.getExpiresAtMillis(),
+                        "rememberMe", s.getRememberMe(),
+                        "current", s.getCurrent()))
+                .toList();
+        return ResponseEntity.ok(rows);
+    }
+
+    @DeleteMapping("/sessions/{sessionId}")
+    public ResponseEntity<?> revokeSession(@PathVariable long sessionId) {
+        var user = CurrentUser.require();
+        revokeSessionForUser(user.id(), sessionId);
+        return ResponseEntity.ok("Session revoked");
+    }
+
     @PostMapping("/logout-all")
-    public ResponseEntity<?> logoutAll(HttpServletResponse resp) {
-        // Revoke every session the user has — "sign out from all devices".
-        // Requires a valid access token (user must be authenticated).
-        auth.logoutAll(CurrentUser.require().id());
+    public ResponseEntity<?> logoutAll(@RequestBody(required = false) Map<String, Object> body,
+                                       HttpServletResponse resp) {
+        var user = CurrentUser.require();
+        boolean excludeCurrent = body != null && Boolean.TRUE.equals(body.get("excludeCurrent"));
+        SessionList sessions = auth.listSessions(user.id(), user.sessionId());
+        if (excludeCurrent) {
+            sessions.getSessionsList().stream()
+                    .filter(s -> !s.getCurrent())
+                    .forEach(s -> revokeSessionForUser(user.id(), s.getId()));
+            return ResponseEntity.ok("Signed out from other devices");
+        }
+        auth.logoutAll(user.id());
+        for (SessionInfo s : sessions.getSessionsList()) {
+            revokedSessions.markRevoked(s.getId());
+            sessionEvents.sessionRevoked(user.id(), s.getId());
+        }
         clearRefreshCookie(resp);
         clearLegacyAccessCookie(resp);
         return ResponseEntity.ok("Logged out from all devices");
+    }
+
+    private void revokeSessionForUser(long userId, long sessionId) {
+        auth.revokeSession(userId, sessionId);
+        revokedSessions.markRevoked(sessionId);
+        sessionEvents.sessionRevoked(userId, sessionId);
     }
 
     /**

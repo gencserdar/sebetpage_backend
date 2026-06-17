@@ -115,13 +115,22 @@ public class WsBridgeService {
                 // subscribeToConversation(conversationId, cb) lines up.
                 // Body is the WsMessageDTO shape the UI casts to directly.
                 long convId = e.getConversationId();
-                Map<String, Object> body = new LinkedHashMap<>();
-                body.put("id", e.getMessage().getId());
-                body.put("conversationId", e.getMessage().getConversationId());
-                body.put("senderId", e.getMessage().getSenderId());
-                body.put("content", e.getMessage().getContent());
-                body.put("createdAt", Instant.ofEpochMilli(e.getMessage().getCreatedAtMillis()).toString());
+                Map<String, Object> body = messageBody(e.getMessage());
                 stomp.convertAndSendToUser(user, "/queue/messages/" + convId, body);
+            }
+            case "MESSAGE_DELETED", "MESSAGE_EDITED" -> {
+                long convId = e.getConversationId();
+                Map<String, Object> body = messageBody(e.getMessage());
+                body.put("type", e.getType());
+                stomp.convertAndSendToUser(user, "/queue/messages/" + convId, body);
+            }
+            case "TYPING" -> {
+                long convId = e.getConversationId();
+                stomp.convertAndSendToUser(user, "/queue/messages/" + convId, Map.of(
+                        "type", "TYPING",
+                        "conversationId", convId,
+                        "userId", e.getSubjectUserId()
+                ));
             }
             case "READ" -> {
                 // Frontend's per-conversation handler branches on `type === "READ"`
@@ -165,5 +174,19 @@ public class WsBridgeService {
             ));
             default -> log.debug("Unhandled chat event type: {}", e.getType());
         }
+    }
+
+    private static Map<String, Object> messageBody(com.serdar.proto.chat.ChatMessage m) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", m.getId());
+        body.put("conversationId", m.getConversationId());
+        body.put("senderId", m.getSenderId());
+        body.put("content", m.getContent());
+        body.put("createdAt", Instant.ofEpochMilli(m.getCreatedAtMillis()).toString());
+        if (m.getEditedAtMillis() > 0) {
+            body.put("editedAt", Instant.ofEpochMilli(m.getEditedAtMillis()).toString());
+        }
+        body.put("deleted", m.getDeleted());
+        return body;
     }
 }

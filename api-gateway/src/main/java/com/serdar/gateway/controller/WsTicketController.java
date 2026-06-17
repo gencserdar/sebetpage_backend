@@ -27,6 +27,7 @@ public class WsTicketController {
         }
         var ticket = tickets.issue(
                 me.id(),
+                me.sessionId(),
                 me.email(),
                 me.nickname(),
                 request.getRemoteAddr(),

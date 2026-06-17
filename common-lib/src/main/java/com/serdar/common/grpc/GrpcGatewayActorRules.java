@@ -35,6 +35,9 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.chat.ChatService/UpdateMessagingGroupParticipant", new ActorRule("requester_id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/GetPresenceSnapshot", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/SubscribeEvents", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.chat.ChatService/DeleteMessage", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.chat.ChatService/EditMessage", new ActorRule("caller_id", false)),
+            Map.entry("com.serdar.proto.chat.ChatService/NotifyTyping", new ActorRule("user_id", false)),
 
             // user-service
             Map.entry("com.serdar.proto.user.UserService/UpdateProfilePhoto", new ActorRule("user_id", false)),
@@ -59,7 +62,6 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.user.UserService/IsBlockedEitherWay", new ActorRule("caller_id", false)),
             Map.entry("com.serdar.proto.user.UserService/MyBlocks", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.user.UserService/SearchUsers", new ActorRule("caller_id", false)),
-            Map.entry("com.serdar.proto.user.UserService/GetProfileSettings", new ActorRule("id", false)),
 
             // auth-service
             Map.entry("com.serdar.proto.auth.AuthService/LogoutAll", new ActorRule("user_id", false)),
@@ -73,12 +75,15 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.auth.AuthService/FreezeAccount", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/UnfreezeAccount", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/AbortRegistration", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/ListSessions", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/RevokeSession", new ActorRule("user_id", false)),
 
             // community-service
             Map.entry("com.serdar.proto.community.CommunityService/CreateCommunity", new ActorRule("creator_id", false)),
             Map.entry("com.serdar.proto.community.CommunityService/Invite", new ActorRule("inviter_id", false)),
             Map.entry("com.serdar.proto.community.CommunityService/RespondToInvite", new ActorRule("responder_id", false)),
-            Map.entry("com.serdar.proto.community.CommunityService/MyCommunities", new ActorRule("id", false))
+            Map.entry("com.serdar.proto.community.CommunityService/MyCommunities", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.community.CommunityService/IsMember", new ActorRule("user_id", false))
     );
 
     private GrpcGatewayActorRules() {}

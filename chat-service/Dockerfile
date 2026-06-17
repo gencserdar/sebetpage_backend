@@ -12,6 +12,7 @@ COPY api-gateway/pom.xml api-gateway/pom.xml
 COPY mail-worker/pom.xml mail-worker/pom.xml
 COPY --chmod=755 build-support/mvn-package.sh /usr/local/bin/mvn-package.sh
 RUN --mount=type=cache,target=/root/.m2,sharing=locked,id=maven-repo \
+    echo "==> Prefetching Maven dependencies (may take a few minutes on first build)..." && \
     mvn -B -pl proto-contracts,common-lib,chat-service -am -DskipTests dependency:go-offline || true
 COPY proto-contracts/src proto-contracts/src
 COPY common-lib/src   common-lib/src

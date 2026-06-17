@@ -20,6 +20,8 @@ service AuthService {
   rpc Logout           (LogoutRequest)          returns (com.serdar.proto.common.Empty);
   // Logout all sessions for a user (all devices).
   rpc LogoutAll        (LogoutAllRequest)       returns (com.serdar.proto.common.Empty);
+  rpc ListSessions     (ListSessionsRequest)    returns (SessionList);
+  rpc RevokeSession    (RevokeSessionRequest)   returns (com.serdar.proto.common.Empty);
 
   rpc Activate         (ActivateRequest)        returns (com.serdar.proto.common.BoolResponse);
   // Re-issue activation link for unactivated accounts (silent no-op otherwise).
@@ -120,6 +122,28 @@ message LogoutRequest {
 // Invalidate every session owned by a user — "logout from all devices".
 message LogoutAllRequest {
   int64 user_id = 1;
+}
+
+message ListSessionsRequest {
+  int64 user_id = 1;
+  int64 current_session_id = 2;
+}
+
+message SessionInfo {
+  int64 id = 1;
+  int64 created_at_millis = 2;
+  int64 expires_at_millis = 3;
+  bool remember_me = 4;
+  bool current = 5;
+}
+
+message SessionList {
+  repeated SessionInfo sessions = 1;
+}
+
+message RevokeSessionRequest {
+  int64 user_id = 1;
+  int64 session_id = 2;
 }
 
 message ActivateRequest {

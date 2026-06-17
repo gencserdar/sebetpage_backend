@@ -78,6 +78,19 @@ public class ChatStompController {
         }
     }
 
+    @MessageMapping("/chat/typing")
+    public void typing(@Payload Map<String, Object> payload, Principal principal) {
+        if (principal == null) return;
+        long me = Long.parseLong(principal.getName());
+        Long conversationId = asLong(payload.get("conversationId"));
+        if (conversationId == null) return;
+        try {
+            GrpcActorContext.runAs(me, () -> chat.notifyTyping(conversationId, me));
+        } catch (Exception e) {
+            log.warn("chat.notifyTyping failed for user {} conv {}: {}", me, conversationId, e.getMessage());
+        }
+    }
+
     @MessageMapping("/friends/snapshot")
     public void snapshot(Principal principal) {
         if (principal == null) return;

@@ -2,6 +2,7 @@ package com.serdar.community.grpc;
 
 import com.serdar.common.GrpcErrors;
 import com.serdar.common.ServiceException;
+import com.serdar.common.grpc.GatewayUserContext;
 import com.serdar.community.entity.CommunityMember;
 import com.serdar.community.service.CommunityDomainService;
 import com.serdar.proto.common.BoolResponse;
@@ -72,10 +73,16 @@ public class CommunityGrpcService extends CommunityServiceGrpc.CommunityServiceI
 
     @Override
     public void isMember(MembershipRequest req, StreamObserver<BoolResponse> out) {
-        out.onNext(BoolResponse.newBuilder()
-                .setValue(svc.isMember(req.getCommunityId(), req.getUserId()))
-                .build());
-        out.onCompleted();
+        guard(out, () -> {
+            Long viewerId = GatewayUserContext.currentViewerId();
+            if (viewerId == null || viewerId != req.getUserId()) {
+                throw ServiceException.forbidden("Cannot query membership for another user");
+            }
+            out.onNext(BoolResponse.newBuilder()
+                    .setValue(svc.isMember(req.getCommunityId(), req.getUserId()))
+                    .build());
+            out.onCompleted();
+        });
     }
 
     private static Community toProto(com.serdar.community.entity.Community c, CommunityMember.Role role) {

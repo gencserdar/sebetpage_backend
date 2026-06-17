@@ -101,6 +101,33 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
     }
 
     @Override
+    public void listSessions(ListSessionsRequest req, StreamObserver<SessionList> out) {
+        guard(out, () -> {
+            SessionList.Builder b = SessionList.newBuilder();
+            for (AuthDomainService.SessionView s : svc.listSessions(req.getUserId(), req.getCurrentSessionId())) {
+                b.addSessions(SessionInfo.newBuilder()
+                        .setId(s.id())
+                        .setCreatedAtMillis(s.createdAtMillis())
+                        .setExpiresAtMillis(s.expiresAtMillis())
+                        .setRememberMe(s.rememberMe())
+                        .setCurrent(s.current())
+                        .build());
+            }
+            out.onNext(b.build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void revokeSession(RevokeSessionRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.revokeSession(req.getUserId(), req.getSessionId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void activate(ActivateRequest req, StreamObserver<BoolResponse> out) {
         guard(out, () -> {
             svc.activate(req.getActivationCode());

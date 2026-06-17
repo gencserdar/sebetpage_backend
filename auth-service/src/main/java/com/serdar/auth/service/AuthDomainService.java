@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -41,9 +42,8 @@ import java.util.regex.Pattern;
  * the refresh token. This lets the gateway route a single-device logout by
  * passing only the session id — no extra cookie required.
  *
- * Validate does NOT check whether the session row still exists. Access tokens
- * are short-lived (1 min), so the worst-case window after a logout is trivially
- * small and avoids an extra DB hit on every authenticated request.
+ * Validate checks the session row still exists so revoked devices lose access on
+ * the very next HTTP request (not only when /refresh runs).
  */
 @Service
 @RequiredArgsConstructor
@@ -239,6 +239,39 @@ public class AuthDomainService {
     @Transactional
     public void logoutAll(long userId) {
         revokeAllSessions(userId);
+    }
+
+    @Transactional
+    public void logoutAllExcept(long userId, long keepSessionId) {
+        if (keepSessionId <= 0) {
+            revokeAllSessions(userId);
+            return;
+        }
+        sessions.deleteAllByUserIdExcept(userId, keepSessionId);
+    }
+
+    public record SessionView(long id, long createdAtMillis, long expiresAtMillis,
+                              boolean rememberMe, boolean current) {}
+
+    public List<SessionView> listSessions(long userId, long currentSessionId) {
+        return sessions.findAllByUserId(userId).stream()
+                .map(s -> new SessionView(
+                        s.getId(),
+                        s.getCreatedAt().toInstant(ZoneOffset.UTC).toEpochMilli(),
+                        s.getExpiresAt().toInstant(ZoneOffset.UTC).toEpochMilli(),
+                        Boolean.TRUE.equals(s.getRememberMe()),
+                        s.getId().equals(currentSessionId)))
+                .toList();
+    }
+
+    @Transactional
+    public void revokeSession(long userId, long sessionId) {
+        Session session = sessions.findById(sessionId)
+                .orElseThrow(() -> ServiceException.notFound("Session not found"));
+        if (!session.getUserId().equals(userId)) {
+            throw ServiceException.forbidden("Session does not belong to user");
+        }
+        sessions.delete(session);
     }
 
     @Transactional
@@ -650,6 +683,8 @@ public class AuthDomainService {
             if (claims.get("type") != null)    return ValidationResult.invalid(); // reject refresh tokens
             Credential c = repo.findById(uid).orElse(null);
             if (c == null || !c.getEmail().equals(claims.getSubject()))
+                return ValidationResult.invalid();
+            if (!sessions.existsById(sid))
                 return ValidationResult.invalid();
             return new ValidationResult(true, c.getId(), c.getEmail(),
                     c.getNickname(), c.getRole(), sid, Boolean.TRUE.equals(c.getFrozen()));

@@ -76,7 +76,7 @@ public class EntityEventBroadcaster {
         }
         if (audience.isEmpty()) {
             try {
-                audience.addAll(users.friendIds(id));
+                audience.addAll(GrpcActorContext.callAs(id, () -> users.friendIds(id)));
             } catch (Exception e) {
                 log.warn("USER_UPDATED friend audience fetch failed for {}: {}", id, e.getMessage());
                 return;

@@ -32,10 +32,12 @@ public class WsTicketService {
         this.ttlSeconds = ttlSeconds;
     }
 
-    public IssuedTicket issue(long userId, String email, String nickname, String clientAddress, String userAgent) {
+    public IssuedTicket issue(long userId, long sessionId, String email, String nickname,
+                              String clientAddress, String userAgent) {
         String value = newTicketValue();
         StoredTicket ticket = new StoredTicket(
                 userId,
+                sessionId,
                 email,
                 nickname,
                 normalize(clientAddress),
@@ -73,6 +75,7 @@ public class WsTicketService {
 
         return Optional.of(new Ticket(
                 stored.userId(),
+                stored.sessionId(),
                 stored.email(),
                 stored.nickname(),
                 stored.clientAddress(),
@@ -98,6 +101,7 @@ public class WsTicketService {
     public record IssuedTicket(String value, long expiresInSeconds) {}
     public record Ticket(
             long userId,
+            long sessionId,
             String email,
             String nickname,
             String clientAddress,
@@ -106,6 +110,7 @@ public class WsTicketService {
     ) {}
     record StoredTicket(
             long userId,
+            long sessionId,
             String email,
             String nickname,
             String clientAddress,

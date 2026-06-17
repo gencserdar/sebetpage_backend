@@ -20,4 +20,7 @@ public class Message {
     private String contentCipherB64;
     private String contentIvB64;
     private LocalDateTime createdAt;
+    private LocalDateTime editedAt;
+    @Builder.Default
+    private boolean deleted = false;
 }

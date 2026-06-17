@@ -3,6 +3,7 @@ package com.serdar.gateway.ws;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -17,10 +18,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtHandshakeInterceptor handshakeInterceptor;
     private final StompPrincipalHandshakeHandler handshakeHandler;
+    private final SessionStompChannelInterceptor sessionStompInterceptor;
 
     /** Same env var as the REST CORS config — keeps the two surfaces in sync. */
     @Value("${app.allowed-origins}")
     private String allowedOriginsCsv;
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(sessionStompInterceptor);
+    }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {

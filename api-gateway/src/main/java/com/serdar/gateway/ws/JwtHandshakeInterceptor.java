@@ -37,6 +37,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         if (ticket != null) {
             return tickets.consume(ticket, clientAddress(request), userAgent(request)).map(t -> {
                 attributes.put("userId", t.userId());
+                attributes.put("sessionId", t.sessionId());
                 attributes.put("nickname", t.nickname());
                 attributes.put("email", t.email());
                 return true;
@@ -53,6 +54,7 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             ValidateTokenResponse v = auth.validate(token);
             if (!v.getValid()) return false;
             attributes.put("userId", v.getUserId());
+            attributes.put("sessionId", v.getSessionId());
             attributes.put("nickname", v.getNickname());
             attributes.put("email", v.getEmail());
             return true;

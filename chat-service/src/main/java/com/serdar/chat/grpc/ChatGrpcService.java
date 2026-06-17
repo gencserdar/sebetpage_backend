@@ -53,6 +53,35 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     @Override
+    public void deleteMessage(DeleteMessageRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            chat.deleteMessage(req.getConversationId(), req.getMessageId(),
+                    req.getCallerId(), req.getCreatedAtMillis());
+            out.onNext(Empty.newBuilder().build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void editMessage(EditMessageRequest req, StreamObserver<ChatMessage> out) {
+        guard(out, () -> {
+            ChatMessage msg = chat.editMessage(req.getConversationId(), req.getMessageId(),
+                    req.getCallerId(), req.getCreatedAtMillis(), req.getPlaintext());
+            out.onNext(msg);
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void notifyTyping(TypingRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            chat.notifyTyping(req.getConversationId(), req.getUserId());
+            out.onNext(Empty.newBuilder().build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void getPage(GetPageRequest req, StreamObserver<MessagePage> out) {
         guard(out, () -> {
             var page = chat.getPage(req.getConversationId(), req.getCallerId(), req.getPage(), req.getSize());
@@ -233,7 +262,11 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
 
         // Push a presence snapshot immediately so the client can render the friend list state.
         try { out.onNext(chat.presenceSnapshotFor(userId)); } catch (Exception ignore) { /* stream closed */ }
-        chat.broadcastPresence(userId, true);
+        try {
+            chat.broadcastPresence(userId, true);
+        } catch (Exception e) {
+            log.warn("online-presence broadcast suppressed for user {}: {}", userId, e.toString());
+        }
 
         if (out instanceof ServerCallStreamObserver<ChatEvent> srv) {
             srv.setOnCancelHandler(() -> {

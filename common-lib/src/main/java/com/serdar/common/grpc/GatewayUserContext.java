@@ -13,10 +13,10 @@ public final class GatewayUserContext {
     private GatewayUserContext() {}
 
     public static Long currentViewerId() {
-        Long viewer = VIEWER_ID.get();
-        if (viewer != null) {
-            return viewer;
+        Long acting = GrpcActorContext.current();
+        if (acting != null) {
+            return acting;
         }
-        return GrpcActorContext.current();
+        return VIEWER_ID.get();
     }
 }

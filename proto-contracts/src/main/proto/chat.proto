@@ -9,6 +9,9 @@ import "common.proto";
 service ChatService {
   rpc GetOrCreateDirect      (GetOrCreateDirectRequest)      returns (Conversation);
   rpc SendMessage            (SendMessageRequest)            returns (ChatMessage);
+  rpc DeleteMessage          (DeleteMessageRequest)          returns (com.serdar.proto.common.Empty);
+  rpc EditMessage            (EditMessageRequest)            returns (ChatMessage);
+  rpc NotifyTyping           (TypingRequest)                 returns (com.serdar.proto.common.Empty);
   rpc GetPage                (GetPageRequest)                returns (MessagePage);
   rpc GetLatest              (GetLatestRequest)              returns (MessageList);
   rpc MarkRead               (MarkReadRequest)               returns (MarkReadResponse);
@@ -66,12 +69,34 @@ message SendMessageRequest {
   string plaintext = 3;
 }
 
+message DeleteMessageRequest {
+  int64 conversation_id = 1;
+  int64 message_id = 2;
+  int64 caller_id = 3;
+  int64 created_at_millis = 4;
+}
+
+message EditMessageRequest {
+  int64 conversation_id = 1;
+  int64 message_id = 2;
+  int64 caller_id = 3;
+  int64 created_at_millis = 4;
+  string plaintext = 5;
+}
+
+message TypingRequest {
+  int64 conversation_id = 1;
+  int64 user_id = 2;
+}
+
 message ChatMessage {
   int64  id = 1;
   int64  conversation_id = 2;
   int64  sender_id = 3;
   string content = 4; // plaintext — service decrypts before returning
   int64  created_at_millis = 5;
+  int64  edited_at_millis = 6;
+  bool   deleted = 7;
 }
 
 message MessageList { repeated ChatMessage messages = 1; }

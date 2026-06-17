@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.cassandra.config.AbstractCassandraConfiguration;
 import org.springframework.data.cassandra.config.SchemaAction;
+import org.springframework.data.cassandra.config.SessionBuilderConfigurer;
 import org.springframework.data.cassandra.core.cql.keyspace.CreateKeyspaceSpecification;
 import org.springframework.data.cassandra.core.cql.keyspace.KeyspaceOption;
 import org.springframework.data.cassandra.repository.config.EnableCassandraRepositories;
@@ -27,6 +28,12 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
     @Value("${spring.cassandra.local-datacenter}")
     private String localDatacenter;
 
+    @Value("${spring.cassandra.username:}")
+    private String username;
+
+    @Value("${spring.cassandra.password:}")
+    private String password;
+
     @Override
     protected String getKeyspaceName() {
         return keyspace;
@@ -45,6 +52,14 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
     @Override
     protected String getLocalDataCenter() {
         return localDatacenter;
+    }
+
+    @Override
+    protected SessionBuilderConfigurer getSessionBuilderConfigurer() {
+        if (username.isBlank() || password.isBlank()) {
+            return null;
+        }
+        return sessionBuilder -> sessionBuilder.withAuthCredentials(username, password);
     }
 
     @Override

@@ -35,7 +35,9 @@ app:
   opensearch:
     host: ${OPENSEARCH_HOST}
     port: ${OPENSEARCH_PORT}
-    scheme: ${OPENSEARCH_SCHEME}
+    scheme: ${OPENSEARCH_SCHEME:http}
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}
 
 grpc:
   server:

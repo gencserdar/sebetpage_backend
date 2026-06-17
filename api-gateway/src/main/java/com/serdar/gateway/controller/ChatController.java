@@ -54,6 +54,35 @@ public class ChatController {
         return ResponseEntity.ok(toMessage(m));
     }
 
+    @DeleteMapping("/conversations/{id}/messages/{messageId}")
+    public ResponseEntity<?> deleteMessage(@PathVariable long id,
+                                           @PathVariable long messageId,
+                                           @RequestParam long createdAtMillis) {
+        long me = CurrentUser.require().id();
+        chat.deleteMessage(id, messageId, me, createdAtMillis);
+        return ResponseEntity.ok(Map.of("deleted", true));
+    }
+
+    @PatchMapping("/conversations/{id}/messages/{messageId}")
+    public ResponseEntity<?> editMessage(@PathVariable long id,
+                                         @PathVariable long messageId,
+                                         @RequestBody Map<String, Object> body) {
+        long me = CurrentUser.require().id();
+        String content = body.get("content") != null ? String.valueOf(body.get("content")) : "";
+        long createdAtMillis = body.get("createdAtMillis") instanceof Number n
+                ? n.longValue()
+                : Long.parseLong(String.valueOf(body.get("createdAtMillis")));
+        ChatMessage m = chat.editMessage(id, messageId, me, createdAtMillis, content);
+        return ResponseEntity.ok(toMessage(m));
+    }
+
+    @PostMapping("/conversations/{id}/typing")
+    public ResponseEntity<?> typing(@PathVariable long id) {
+        long me = CurrentUser.require().id();
+        chat.notifyTyping(id, me);
+        return ResponseEntity.ok(Map.of("ok", true));
+    }
+
     @PostMapping("/conversations/{id}/read")
     public ResponseEntity<?> markRead(@PathVariable long id) {
         long me = CurrentUser.require().id();
@@ -123,6 +152,10 @@ public class ChatController {
         row.put("senderId", m.getSenderId());
         row.put("content", m.getContent());
         row.put("createdAt", Instant.ofEpochMilli(m.getCreatedAtMillis()).toString());
+        if (m.getEditedAtMillis() > 0) {
+            row.put("editedAt", Instant.ofEpochMilli(m.getEditedAtMillis()).toString());
+        }
+        row.put("deleted", m.getDeleted());
         return row;
     }
 }
