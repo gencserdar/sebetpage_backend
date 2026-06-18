@@ -102,7 +102,8 @@ public class ChatController {
         return ResponseEntity.ok(Map.of(
                 "myLastReadAtMillis", r.getMyLastReadAtMillis(),
                 "friendLastReadAtMillis", r.getFriendLastReadAtMillis(),
-                "seenMyMessageId", r.getSeenMyMessageId(),
+                "seenMyMessageId", r.getSeenMyMessageId() > 0
+                        ? Long.toString(r.getSeenMyMessageId()) : null,
                 "friendUserId", r.getFriendUserId(),
                 "myUserId", r.getMyUserId()
         ));
@@ -147,11 +148,12 @@ public class ChatController {
         // same shape the WS bridge pushes — so REST history and live frames
         // line up and the chat doesn't render `Invalid Date` after a reopen.
         Map<String, Object> row = new LinkedHashMap<>();
-        row.put("id", m.getId());
+        row.put("id", Long.toString(m.getId()));
         row.put("conversationId", m.getConversationId());
         row.put("senderId", m.getSenderId());
         row.put("content", m.getContent());
         row.put("createdAt", Instant.ofEpochMilli(m.getCreatedAtMillis()).toString());
+        row.put("createdAtMillis", m.getCreatedAtMillis());
         if (m.getEditedAtMillis() > 0) {
             row.put("editedAt", Instant.ofEpochMilli(m.getEditedAtMillis()).toString());
         }

@@ -44,6 +44,7 @@ public class CassandraMessageStore implements MessageStore {
     private PreparedStatement deleteBySender;
     private PreparedStatement updateConversation;
     private PreparedStatement updateBySender;
+    private PreparedStatement softDeleteConversation;
 
     private void ensureInitialized() {
         if (initialized) {
@@ -66,6 +67,7 @@ public class CassandraMessageStore implements MessageStore {
                         content_cipher_b64 text,
                         content_iv_b64 text,
                         edited_at timestamp,
+                        deleted boolean,
                         PRIMARY KEY (conversation_id, created_at, message_id)
                     ) WITH CLUSTERING ORDER BY (created_at DESC, message_id DESC)
                     """);
@@ -85,7 +87,12 @@ public class CassandraMessageStore implements MessageStore {
             } catch (Exception ignored) {
                 // column already exists
             }
-            String cols = "conversation_id, created_at, message_id, sender_id, content_cipher_b64, content_iv_b64, edited_at";
+            try {
+                session.execute("ALTER TABLE messages_by_conversation ADD deleted boolean");
+            } catch (Exception ignored) {
+                // column already exists
+            }
+            String cols = "conversation_id, created_at, message_id, sender_id, content_cipher_b64, content_iv_b64, edited_at, deleted";
             selectConversationAll = session.prepare(
                     "SELECT " + cols + " FROM messages_by_conversation WHERE conversation_id = ?");
             selectConversationLimited = session.prepare(
@@ -107,6 +114,9 @@ public class CassandraMessageStore implements MessageStore {
             updateBySender = session.prepare(
                     "UPDATE messages_by_sender SET content_cipher_b64 = ?, content_iv_b64 = ?"
                             + " WHERE conversation_id = ? AND sender_id = ? AND created_at = ? AND message_id = ?");
+            softDeleteConversation = session.prepare(
+                    "UPDATE messages_by_conversation SET deleted = true, content_cipher_b64 = null, content_iv_b64 = null"
+                            + " WHERE conversation_id = ? AND created_at = ? AND message_id = ?");
             initialized = true;
         }
     }
@@ -144,9 +154,20 @@ public class CassandraMessageStore implements MessageStore {
     @Override
     public Optional<Message> findMessage(long conversationId, long messageId, long createdAtMillis) {
         ensureInitialized();
-        Instant created = Instant.ofEpochMilli(createdAtMillis);
-        Row row = session.execute(selectOne.bind(conversationId, created, messageId)).one();
-        return row == null ? Optional.empty() : Optional.of(fromRow(row));
+        Optional<Message> byId = loadAll(conversationId).stream()
+                .filter(m -> m.getId() != null && m.getId() == messageId)
+                .findFirst();
+        if (byId.isPresent()) {
+            return byId;
+        }
+        if (createdAtMillis > 0) {
+            Instant created = Instant.ofEpochMilli(createdAtMillis);
+            Row row = session.execute(selectOne.bind(conversationId, created, messageId)).one();
+            if (row != null) {
+                return Optional.of(fromRow(row));
+            }
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -154,8 +175,8 @@ public class CassandraMessageStore implements MessageStore {
         ensureInitialized();
         Message m = findMessage(conversationId, messageId, createdAtMillis)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
-        Instant created = Instant.ofEpochMilli(createdAtMillis);
-        session.execute(deleteConversation.bind(conversationId, created, messageId));
+        Instant created = m.getCreatedAt().toInstant(ZoneOffset.UTC);
+        session.execute(softDeleteConversation.bind(conversationId, created, messageId));
         if (m.getSenderId() != null && m.getSenderId() > 0) {
             session.execute(deleteBySender.bind(conversationId, m.getSenderId(), created, messageId));
         }
@@ -167,7 +188,7 @@ public class CassandraMessageStore implements MessageStore {
         ensureInitialized();
         Message m = findMessage(conversationId, messageId, createdAtMillis)
                 .orElseThrow(() -> new IllegalArgumentException("Message not found"));
-        Instant created = Instant.ofEpochMilli(createdAtMillis);
+        Instant created = m.getCreatedAt().toInstant(ZoneOffset.UTC);
         Instant edited = editedAt.toInstant(ZoneOffset.UTC);
         session.execute(updateConversation.bind(
                 contentCipherB64, contentIvB64, edited, conversationId, created, messageId));
@@ -251,6 +272,9 @@ public class CassandraMessageStore implements MessageStore {
     }
 
     private static boolean countsAsUnread(Message m, long meId) {
+        if (m.isDeleted()) {
+            return false;
+        }
         Long senderId = m.getSenderId();
         return senderId != null && senderId > 0 && senderId != meId;
     }
@@ -281,6 +305,7 @@ public class CassandraMessageStore implements MessageStore {
 
     private Message fromRow(Row row) {
         Instant edited = row.getInstant("edited_at");
+        Boolean deleted = row.getBoolean("deleted");
         return Message.builder()
                 .id(row.getLong("message_id"))
                 .conversationId(row.getLong("conversation_id"))
@@ -289,6 +314,7 @@ public class CassandraMessageStore implements MessageStore {
                 .contentIvB64(row.getString("content_iv_b64"))
                 .createdAt(LocalDateTime.ofInstant(row.getInstant("created_at"), ZoneOffset.UTC))
                 .editedAt(edited == null ? null : LocalDateTime.ofInstant(edited, ZoneOffset.UTC))
+                .deleted(Boolean.TRUE.equals(deleted))
                 .build();
     }
 

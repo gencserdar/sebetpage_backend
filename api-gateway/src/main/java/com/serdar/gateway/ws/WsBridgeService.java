@@ -178,11 +178,12 @@ public class WsBridgeService {
 
     private static Map<String, Object> messageBody(com.serdar.proto.chat.ChatMessage m) {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("id", m.getId());
+        body.put("id", Long.toString(m.getId()));
         body.put("conversationId", m.getConversationId());
         body.put("senderId", m.getSenderId());
         body.put("content", m.getContent());
         body.put("createdAt", Instant.ofEpochMilli(m.getCreatedAtMillis()).toString());
+        body.put("createdAtMillis", m.getCreatedAtMillis());
         if (m.getEditedAtMillis() > 0) {
             body.put("editedAt", Instant.ofEpochMilli(m.getEditedAtMillis()).toString());
         }

@@ -85,6 +85,7 @@ public class ChatDomainService {
             throw ServiceException.forbidden("Not the sender");
         }
         messages.deleteMessage(conversationId, messageId, createdAtMillis);
+        m.setDeleted(true);
         broadcastMessageMutation(c, m, "MESSAGE_DELETED", "", true);
     }
 
@@ -240,6 +241,9 @@ public class ChatDomainService {
     }
 
     private com.serdar.proto.chat.ChatMessage decrypt(Message m) {
+        if (m.isDeleted()) {
+            return toProtoMessage(m, "");
+        }
         String plain = aes.decrypt(m.getContentIvB64(), m.getContentCipherB64(),
                 AesGcm.aad(m.getConversationId(), m.getSenderId()));
         return toProtoMessage(m, plain);
