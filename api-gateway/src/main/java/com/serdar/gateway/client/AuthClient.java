@@ -120,4 +120,8 @@ public class AuthClient {
     public void unfreezeAccount(long userId) {
         stub.unfreezeAccount(IdRequest.newBuilder().setId(userId).build());
     }
+
+    public void deleteAccount(long userId) {
+        stub.deleteAccount(IdRequest.newBuilder().setId(userId).build());
+    }
 }

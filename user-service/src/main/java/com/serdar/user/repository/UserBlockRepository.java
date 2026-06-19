@@ -19,4 +19,8 @@ public interface UserBlockRepository extends JpaRepository<UserBlock, Long> {
 
     @Modifying
     void deleteByBlockerIdAndBlockedId(Long blockerId, Long blockedId);
+
+    @Modifying
+    @Query("DELETE FROM UserBlock b WHERE b.blockerId = :uid OR b.blockedId = :uid")
+    void deleteAllForUser(@Param("uid") Long uid);
 }

@@ -38,6 +38,7 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.chat.ChatService/DeleteMessage", new ActorRule("caller_id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/EditMessage", new ActorRule("caller_id", false)),
             Map.entry("com.serdar.proto.chat.ChatService/NotifyTyping", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.chat.ChatService/DeleteUserData", new ActorRule("id", false)),
 
             // user-service
             Map.entry("com.serdar.proto.user.UserService/UpdateProfilePhoto", new ActorRule("user_id", false)),
@@ -58,6 +59,7 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.user.UserService/Unblock", new ActorRule("blocker_id", false)),
             Map.entry("com.serdar.proto.user.UserService/SyncProfileEmail", new ActorRule("user_id", false)),
             Map.entry("com.serdar.proto.user.UserService/UpdateProfileSettings", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.user.UserService/DeleteUserData", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.user.UserService/BlockStatus", new ActorRule("caller_id", false)),
             Map.entry("com.serdar.proto.user.UserService/IsBlockedEitherWay", new ActorRule("caller_id", false)),
             Map.entry("com.serdar.proto.user.UserService/MyBlocks", new ActorRule("id", false)),
@@ -74,6 +76,7 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.auth.AuthService/UpdateNickname", new ActorRule("user_id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/FreezeAccount", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/UnfreezeAccount", new ActorRule("id", false)),
+            Map.entry("com.serdar.proto.auth.AuthService/DeleteAccount", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/AbortRegistration", new ActorRule("id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/ListSessions", new ActorRule("user_id", false)),
             Map.entry("com.serdar.proto.auth.AuthService/RevokeSession", new ActorRule("user_id", false)),
@@ -83,7 +86,8 @@ public final class GrpcGatewayActorRules {
             Map.entry("com.serdar.proto.community.CommunityService/Invite", new ActorRule("inviter_id", false)),
             Map.entry("com.serdar.proto.community.CommunityService/RespondToInvite", new ActorRule("responder_id", false)),
             Map.entry("com.serdar.proto.community.CommunityService/MyCommunities", new ActorRule("id", false)),
-            Map.entry("com.serdar.proto.community.CommunityService/IsMember", new ActorRule("user_id", false))
+            Map.entry("com.serdar.proto.community.CommunityService/IsMember", new ActorRule("user_id", false)),
+            Map.entry("com.serdar.proto.community.CommunityService/DeleteUserData", new ActorRule("id", false))
     );
 
     private GrpcGatewayActorRules() {}

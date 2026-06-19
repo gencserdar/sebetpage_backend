@@ -170,6 +170,15 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         });
     }
 
+    @Override
+    public void deleteUserData(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            profileService.deleteUserData(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
     // ---- friendships -------------------------------------------------------
 
     @Override

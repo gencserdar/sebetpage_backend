@@ -69,7 +69,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
             @Value("${app.rate-limit.friend-write.capacity:30}") long friendWriteCapacity,
             @Value("${app.rate-limit.friend-write.window-seconds:60}") long friendWriteWindowSeconds,
             @Value("${app.rate-limit.block-write.capacity:20}") long blockWriteCapacity,
-            @Value("${app.rate-limit.block-write.window-seconds:60}") long blockWriteWindowSeconds
+            @Value("${app.rate-limit.block-write.window-seconds:60}") long blockWriteWindowSeconds,
+            @Value("${app.rate-limit.account-delete.capacity:3}") long accountDeleteCapacity,
+            @Value("${app.rate-limit.account-delete.window-seconds:3600}") long accountDeleteWindowSeconds
     ) {
         this.limiter = limiter;
         this.trustProxyHeaders = trustProxyHeaders;
@@ -127,7 +129,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 regex("block-write", HttpMethod.POST, "^/api/blocks/[^/]+$",
                         blockWriteCapacity, blockWriteWindowSeconds),
                 regex("block-write", HttpMethod.DELETE, "^/api/blocks/[^/]+$",
-                        blockWriteCapacity, blockWriteWindowSeconds)
+                        blockWriteCapacity, blockWriteWindowSeconds),
+                exact("account-delete", HttpMethod.DELETE, "/api/user/account",
+                        accountDeleteCapacity, accountDeleteWindowSeconds)
         );
     }
 

@@ -85,6 +85,15 @@ public class CommunityGrpcService extends CommunityServiceGrpc.CommunityServiceI
         });
     }
 
+    @Override
+    public void deleteUserData(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.deleteUserData(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
     private static Community toProto(com.serdar.community.entity.Community c, CommunityMember.Role role) {
         Community.Builder b = Community.newBuilder()
                 .setId(c.getId())

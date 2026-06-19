@@ -53,6 +53,14 @@ public class CommunitySearchIndexService {
         }
     }
 
+    public void delete(long communityId) {
+        try {
+            client.delete(d -> d.index(INDEX).id(String.valueOf(communityId)));
+        } catch (IOException e) {
+            log.warn("Failed to delete community {} from OpenSearch: {}", communityId, e.getMessage());
+        }
+    }
+
     public List<Long> searchIds(String keyword, int limit) throws IOException {
         if (keyword == null || keyword.isBlank()) return List.of();
         String q = keyword.trim();

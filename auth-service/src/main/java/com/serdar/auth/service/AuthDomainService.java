@@ -671,6 +671,14 @@ public class AuthDomainService {
         repo.save(c);
     }
 
+    @Transactional
+    public void deleteAccount(long userId) {
+        Credential c = repo.findById(userId)
+                .orElseThrow(() -> ServiceException.notFound("User not found"));
+        sessions.deleteAllByUserId(userId);
+        repo.delete(c);
+    }
+
     /** Stateless token validation — used by the gateway on every request. */
     public ValidationResult validate(String accessToken) {
         try {

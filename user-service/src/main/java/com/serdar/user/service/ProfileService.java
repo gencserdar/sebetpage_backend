@@ -4,6 +4,9 @@ import com.serdar.common.ServiceException;
 import com.serdar.user.client.AuthClient;
 import com.serdar.user.search.UserSearchIndexService;
 import com.serdar.user.entity.UserProfile;
+import com.serdar.user.repository.FriendRequestRepository;
+import com.serdar.user.repository.FriendshipRepository;
+import com.serdar.user.repository.UserBlockRepository;
 import com.serdar.user.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,9 @@ public class ProfileService {
     private final AuthClient authClient;
     private final LocalImageStorageService imageStorage;
     private final UserSearchIndexService searchIndex;
+    private final FriendshipRepository friendships;
+    private final FriendRequestRepository friendRequests;
+    private final UserBlockRepository userBlocks;
 
     @Transactional
     public UserProfile createProfile(long userId, String email, String nickname, String name, String surname) {
@@ -139,5 +145,23 @@ public class ProfileService {
         p.setSocialLinksJson(ProfileSettingsJson.normalizeSocialLinksJson(socialLinksJson));
         p.setProfileCardJson(ProfileSettingsJson.normalizeProfileCardJson(profileCardJson));
         return repo.save(p);
+    }
+
+    @Transactional
+    public void deleteUserData(long userId) {
+        UserProfile profile = repo.findById(userId).orElse(null);
+        String previousPhotoUrl = profile == null ? null : profile.getProfileImageUrl();
+
+        friendRequests.deleteAllForUser(userId);
+        friendships.deleteAllForUser(userId);
+        userBlocks.deleteAllForUser(userId);
+        if (profile != null) {
+            repo.delete(profile);
+        }
+
+        searchIndex.delete(userId);
+        if (previousPhotoUrl != null && !previousPhotoUrl.isBlank()) {
+            imageStorage.deleteByPublicUrl(previousPhotoUrl);
+        }
     }
 }

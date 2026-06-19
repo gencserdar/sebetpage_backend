@@ -54,6 +54,14 @@ public class UserSearchIndexService {
         }
     }
 
+    public void delete(long userId) {
+        try {
+            client.delete(d -> d.index(INDEX).id(String.valueOf(userId)));
+        } catch (IOException e) {
+            log.warn("Failed to delete user {} from OpenSearch: {}", userId, e.getMessage());
+        }
+    }
+
     public List<Long> searchIds(String keyword, int limit) throws IOException {
         if (keyword == null || keyword.isBlank()) return List.of();
         String q = keyword.trim();

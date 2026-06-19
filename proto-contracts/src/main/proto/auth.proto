@@ -55,6 +55,8 @@ service AuthService {
   // Account freeze — user-initiated hibernation; revokes all sessions on freeze.
   rpc FreezeAccount   (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
   rpc UnfreezeAccount (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
+  // Permanent account deletion — removes credentials and active sessions.
+  rpc DeleteAccount   (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
 }
 
 enum Role {

@@ -281,6 +281,15 @@ public class AuthGrpcService extends AuthServiceGrpc.AuthServiceImplBase {
         });
     }
 
+    @Override
+    public void deleteAccount(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            svc.deleteAccount(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private static Credentials toProto(Credential c) {

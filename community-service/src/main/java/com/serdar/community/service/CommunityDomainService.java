@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -114,6 +115,29 @@ public class CommunityDomainService {
                     .toList();
         } catch (Exception e) {
             return communities.findByNameContainingIgnoreCaseAndIsPrivateFalse(keyword);
+        }
+    }
+
+    @Transactional
+    public void deleteUserData(long userId) {
+        List<Community> owned = communities.findByCreatedBy(userId);
+
+        invites.deleteAllByFromUserIdOrToUserId(userId, userId);
+        members.deleteAllByUserId(userId);
+
+        for (Community community : owned) {
+            List<CommunityMember> remaining = members.findByCommunityIdAndRoleNot(
+                    community.getId(), CommunityMember.Role.PENDING);
+            if (remaining.isEmpty()) {
+                continue;
+            }
+
+            CommunityMember nextAdmin = remaining.get(ThreadLocalRandom.current().nextInt(remaining.size()));
+            nextAdmin.setRole(CommunityMember.Role.ADMIN);
+            members.save(nextAdmin);
+
+            community.setCreatedBy(nextAdmin.getUserId());
+            communities.save(community);
         }
     }
 

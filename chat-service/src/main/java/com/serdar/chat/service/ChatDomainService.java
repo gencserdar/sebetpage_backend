@@ -362,6 +362,46 @@ public class ChatDomainService {
         return authClient.isFrozen(other);
     }
 
+    @Transactional
+    public void deleteUserData(long userId) {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        List<ConversationParticipant> mine = new ArrayList<>(participants.findByUserIdAndDeletedAtIsNull(userId));
+
+        for (ConversationParticipant participant : mine) {
+            Conversation c = conversations.findByIdAndDeletedAtIsNull(participant.getConversationId()).orElse(null);
+            if (c == null) {
+                continue;
+            }
+
+            messages.deleteBySenderInConversation(c.getId(), userId);
+            unreadCache.clearConversation(userId, c.getId());
+
+            if (c.getType() == Conversation.Type.DIRECT) {
+                messages.deleteByConversationId(c.getId());
+                participants.deleteByConversationId(c.getId());
+                conversations.delete(c);
+                continue;
+            }
+
+            boolean adminLeft = isOwner(c, participant);
+            participant.setDeletedAt(now);
+            participants.save(participant);
+
+            List<ConversationParticipant> remaining = participants.findByConversationIdAndDeletedAtIsNull(c.getId());
+            if (remaining.isEmpty()) {
+                messages.deleteByConversationId(c.getId());
+                participants.deleteByConversationId(c.getId());
+                conversations.delete(c);
+            } else if (adminLeft && remaining.stream().noneMatch(p -> isOwner(c, p))) {
+                ConversationParticipant nextAdmin = nextAdminCandidate(remaining);
+                grantAdmin(nextAdmin);
+                participants.save(nextAdmin);
+            }
+        }
+
+        unreadCache.setTotalUnread(userId, 0);
+    }
+
     public MessagingGroupDetail messagingGroupDetail(long conversationId, long requesterId) {
         Conversation c = requireMessagingGroup(conversationId);
         ConversationParticipant me = activeParticipant(conversationId, requesterId);
@@ -494,7 +534,7 @@ public class ChatDomainService {
         }
 
         if (adminLeft && remaining.stream().noneMatch(p -> isOwner(c, p))) {
-            ConversationParticipant nextAdmin = randomParticipant(remaining);
+            ConversationParticipant nextAdmin = nextAdminCandidate(remaining);
             grantAdmin(nextAdmin);
             participants.save(nextAdmin);
             saveSystemMessage(c, userClient.nickname(nextAdmin.getUserId()) + " is now group admin");
@@ -806,9 +846,26 @@ public class ChatDomainService {
         }
     }
 
-    private ConversationParticipant randomParticipant(List<ConversationParticipant> activeParticipants) {
+    private ConversationParticipant nextAdminCandidate(List<ConversationParticipant> activeParticipants) {
         if (activeParticipants.isEmpty()) throw ServiceException.invalid("No members left");
-        return activeParticipants.get(new Random().nextInt(activeParticipants.size()));
+        return activeParticipants.stream()
+                .sorted(Comparator
+                        .comparingInt(this::permissionScore)
+                        .reversed()
+                        .thenComparing(p -> p.getJoinedAt() == null ? LocalDateTime.MAX : p.getJoinedAt())
+                        .thenComparing(ConversationParticipant::getUserId))
+                .findFirst()
+                .orElseThrow(() -> ServiceException.invalid("No members left"));
+    }
+
+    private int permissionScore(ConversationParticipant p) {
+        int score = 0;
+        if (Boolean.TRUE.equals(p.getCanChangePhoto())) score++;
+        if (Boolean.TRUE.equals(p.getCanChangeDescription())) score++;
+        if (Boolean.TRUE.equals(p.getCanChangeName())) score++;
+        if (Boolean.TRUE.equals(p.getCanRemoveMembers())) score++;
+        if (Boolean.TRUE.equals(p.getCanAddMembers())) score++;
+        return score;
     }
 
     private void grantAdmin(ConversationParticipant participant) {

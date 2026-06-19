@@ -37,4 +37,8 @@ public class CommunityClient {
         return stub.isMember(MembershipRequest.newBuilder()
                 .setCommunityId(communityId).setUserId(userId).build()).getValue();
     }
+
+    public void deleteUserData(long userId) {
+        stub.deleteUserData(IdRequest.newBuilder().setId(userId).build());
+    }
 }

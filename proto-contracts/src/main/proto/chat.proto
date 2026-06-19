@@ -34,6 +34,7 @@ service ChatService {
   rpc SubscribeEvents        (com.serdar.proto.common.IdRequest) returns (stream ChatEvent);
   // Fresh friend-presence snapshot (e.g. after a new friendship is created).
   rpc GetPresenceSnapshot    (com.serdar.proto.common.IdRequest) returns (ChatEvent);
+  rpc DeleteUserData         (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
 }
 
 enum ConversationType {

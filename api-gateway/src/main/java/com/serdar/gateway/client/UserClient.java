@@ -72,6 +72,10 @@ public class UserClient {
                 .build());
     }
 
+    public void deleteUserData(long userId) {
+        stub.deleteUserData(IdRequest.newBuilder().setId(userId).build());
+    }
+
     public FriendStatusResponse friendStatus(long callerId, String otherNickname) {
         return stub.getFriendStatus(GetFriendStatusRequest.newBuilder()
                 .setCallerId(callerId).setOtherNickname(otherNickname).build());

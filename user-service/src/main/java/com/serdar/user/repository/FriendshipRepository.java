@@ -2,6 +2,7 @@ package com.serdar.user.repository;
 
 import com.serdar.user.entity.Friendship;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,4 +18,8 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long> {
     List<Friendship> findFriendshipsOfUser(@Param("uid") Long uid);
 
     boolean existsByUser1IdAndUser2Id(Long user1Id, Long user2Id);
+
+    @Modifying
+    @Query("DELETE FROM Friendship f WHERE f.user1Id = :uid OR f.user2Id = :uid")
+    void deleteAllForUser(@Param("uid") Long uid);
 }

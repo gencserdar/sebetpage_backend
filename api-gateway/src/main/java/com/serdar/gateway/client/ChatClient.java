@@ -72,6 +72,10 @@ public class ChatClient {
         return blocking.myConversations(IdRequest.newBuilder().setId(userId).build());
     }
 
+    public void deleteUserData(long userId) {
+        blocking.deleteUserData(IdRequest.newBuilder().setId(userId).build());
+    }
+
     public Conversation createMessagingGroup(long creatorId, java.util.List<Long> memberIds, String name) {
         return blocking.createMessagingGroup(CreateMessagingGroupRequest.newBuilder()
                 .setCreatorId(creatorId)

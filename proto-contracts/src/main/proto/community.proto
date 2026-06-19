@@ -15,6 +15,7 @@ service CommunityService {
   rpc MyCommunities       (com.serdar.proto.common.IdRequest) returns (CommunityList);
   rpc SearchCommunities   (SearchCommunitiesRequest)  returns (CommunityList);
   rpc IsMember            (MembershipRequest)         returns (com.serdar.proto.common.BoolResponse);
+  rpc DeleteUserData      (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
 }
 
 enum CommunityRole {

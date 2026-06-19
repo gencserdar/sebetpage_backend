@@ -211,6 +211,17 @@ public class CassandraMessageStore implements MessageStore {
     }
 
     @Override
+    public void deleteBySenderInConversation(long conversationId, long senderId) {
+        ensureInitialized();
+        for (CassandraMessageBySender row : bySender.findByKeyConversationIdAndKeySenderId(conversationId, senderId)) {
+            Instant created = row.getKey().getCreatedAt();
+            Long messageId = row.getKey().getMessageId();
+            session.execute(softDeleteConversation.bind(conversationId, created, messageId));
+            session.execute(deleteBySender.bind(conversationId, senderId, created, messageId));
+        }
+    }
+
+    @Override
     public Page<Message> findByConversationIdOrderByCreatedAtDesc(long conversationId, Pageable pageable) {
         ensureInitialized();
         long total = countByConversationId(conversationId);

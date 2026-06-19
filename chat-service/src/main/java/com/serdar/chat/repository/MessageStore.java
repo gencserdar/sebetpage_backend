@@ -7,7 +7,6 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.Optional;
 
 public interface MessageStore {
     Message save(Message message);
@@ -20,6 +19,8 @@ public interface MessageStore {
                      String contentCipherB64, String contentIvB64, LocalDateTime editedAt);
 
     void deleteByConversationId(long conversationId);
+
+    void deleteBySenderInConversation(long conversationId, long senderId);
 
     Page<Message> findByConversationIdOrderByCreatedAtDesc(long conversationId, Pageable pageable);
 

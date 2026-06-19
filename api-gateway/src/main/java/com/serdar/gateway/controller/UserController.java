@@ -1,6 +1,8 @@
 package com.serdar.gateway.controller;
 
 import com.serdar.gateway.client.AuthClient;
+import com.serdar.gateway.client.ChatClient;
+import com.serdar.gateway.client.CommunityClient;
 import com.serdar.gateway.client.UserClient;
 import com.serdar.gateway.dto.Dtos;
 import com.serdar.gateway.mapper.ProfileSettingsMapper;
@@ -11,7 +13,12 @@ import com.serdar.proto.user.BlockStatusResponse;
 import com.serdar.proto.user.ProfileSettings;
 import com.serdar.proto.user.UserProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.serdar.common.config.ProductionTransportValidator;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -31,8 +38,12 @@ public class UserController {
 
     private final AuthClient auth;
     private final UserClient users;
+    private final ChatClient chats;
+    private final CommunityClient communities;
     private final EntityEventBroadcaster broadcaster;
     private final ProfileSettingsMapper profileSettingsMapper;
+
+    @Value("${app.environment}") private String env;
 
     @GetMapping("/me")
     public ResponseEntity<?> me() {
@@ -196,7 +207,38 @@ public class UserController {
         return ResponseEntity.ok(Map.of("status", "active"));
     }
 
+    @DeleteMapping("/account")
+    public ResponseEntity<?> deleteAccount(HttpServletResponse resp) {
+        long id = CurrentUser.require().id();
+        chats.deleteUserData(id);
+        communities.deleteUserData(id);
+        users.deleteUserData(id);
+        auth.deleteAccount(id);
+        clearAuthCookies(resp);
+        return ResponseEntity.ok(Map.of("status", "deleted"));
+    }
+
     // --- helpers -----------------------------------------------------------
+
+    private void clearAuthCookies(HttpServletResponse resp) {
+        boolean secure = ProductionTransportValidator.isProductionLike(env);
+        ResponseCookie refresh = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(0)
+                .build();
+        ResponseCookie legacyAccess = ResponseCookie.from("jwt-token", "")
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(0)
+                .build();
+        resp.addHeader(HttpHeaders.SET_COOKIE, refresh.toString());
+        resp.addHeader(HttpHeaders.SET_COOKIE, legacyAccess.toString());
+    }
 
     private Dtos.UserDTO profileForViewer(long viewerId, Credentials c, UserProfile p) {
         if (viewerId == p.getId()) {

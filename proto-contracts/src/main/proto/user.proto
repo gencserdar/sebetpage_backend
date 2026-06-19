@@ -28,6 +28,8 @@ service UserService {
   rpc SyncProfileEmail  (ChangeEmailRequest)    returns (UserProfile);
   rpc GetProfileSettings (com.serdar.proto.common.IdRequest) returns (ProfileSettings);
   rpc UpdateProfileSettings (UpdateProfileSettingsRequest) returns (ProfileSettings);
+  // Permanent account deletion cleanup for user-owned profile/social data.
+  rpc DeleteUserData   (com.serdar.proto.common.IdRequest) returns (com.serdar.proto.common.Empty);
 
   // Friendships
   rpc GetFriendStatus   (GetFriendStatusRequest) returns (FriendStatusResponse);

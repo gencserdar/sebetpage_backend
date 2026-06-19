@@ -256,6 +256,15 @@ public class ChatGrpcService extends ChatServiceGrpc.ChatServiceImplBase {
     }
 
     @Override
+    public void deleteUserData(IdRequest req, StreamObserver<Empty> out) {
+        guard(out, () -> {
+            chat.deleteUserData(req.getId());
+            out.onNext(Empty.getDefaultInstance());
+            out.onCompleted();
+        });
+    }
+
+    @Override
     public void subscribeEvents(IdRequest req, StreamObserver<ChatEvent> out) {
         long userId = req.getId();
         broker.subscribe(userId, out);
