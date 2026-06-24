@@ -46,6 +46,16 @@ public class CommunityController {
         return ResponseEntity.ok(accept ? "Joined" : "Declined");
     }
 
+    /** Public discovery — only non-private communities (no auth required). */
+    @GetMapping("/search")
+    public ResponseEntity<?> searchPublic(@RequestParam String keyword) {
+        List<Map<String, Object>> rows = communities.search(keyword).getCommunitiesList().stream()
+                .filter(c -> !c.getIsPrivate())
+                .map(CommunityController::toRow)
+                .toList();
+        return ResponseEntity.ok(rows);
+    }
+
     private static Map<String, Object> toRow(Community c) {
         return Map.of(
                 "id", c.getId(),

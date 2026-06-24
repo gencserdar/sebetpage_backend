@@ -118,6 +118,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
                         profilePhotoCapacity, profilePhotoWindowSeconds),
                 exact("search", HttpMethod.GET, "/api/search",
                         searchCapacity, searchWindowSeconds),
+                exact("community-search", HttpMethod.GET, "/api/communities/search",
+                        searchCapacity, searchWindowSeconds),
                 exact("friend-write", HttpMethod.POST, "/api/friend-requests/send",
                         friendWriteCapacity, friendWriteWindowSeconds),
                 regex("friend-write", HttpMethod.POST, "^/api/friend-requests/[^/]+/respond$",
