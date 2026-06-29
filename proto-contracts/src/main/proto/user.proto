@@ -53,6 +53,11 @@ service UserService {
 
   // Search (user results only; community-service contributes its own half)
   rpc SearchUsers        (SearchRequest) returns (UserSearchList);
+
+  // Landing page visitor paintings (anonymous, one per visitor id)
+  rpc ListLandingPaintings (ListLandingPaintingsRequest) returns (LandingPaintingList);
+  rpc GetVisitorLandingPainting (com.serdar.proto.common.StringRequest) returns (LandingPainting);
+  rpc UpsertLandingPainting (UpsertLandingPaintingRequest) returns (LandingPainting);
 }
 
 message UserProfile {
@@ -199,4 +204,26 @@ message BlockStatusResponse {
 message SearchRequest {
   int64  caller_id = 1;
   string keyword = 2;
+}
+
+message LandingPainting {
+  int64  id = 1;
+  string visitor_id = 2;
+  string image_url = 3;
+  int64  created_at_millis = 4;
+}
+
+message LandingPaintingList {
+  repeated LandingPainting paintings = 1;
+}
+
+message ListLandingPaintingsRequest {
+  int32 limit = 1;
+}
+
+message UpsertLandingPaintingRequest {
+  string visitor_id = 1;
+  bytes  image_bytes = 2;
+  string content_type = 3;
+  string original_filename = 4;
 }

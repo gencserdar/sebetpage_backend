@@ -121,4 +121,24 @@ public class UserClient {
     public UserSearchList searchUsers(long callerId, String keyword) {
         return stub.searchUsers(SearchRequest.newBuilder().setCallerId(callerId).setKeyword(keyword).build());
     }
+
+    public LandingPaintingList listLandingPaintings(int limit) {
+        return stub.listLandingPaintings(
+                ListLandingPaintingsRequest.newBuilder().setLimit(limit).build());
+    }
+
+    public LandingPainting getVisitorLandingPainting(String visitorId) {
+        return stub.getVisitorLandingPainting(
+                StringRequest.newBuilder().setValue(visitorId).build());
+    }
+
+    public LandingPainting upsertLandingPainting(
+            String visitorId, byte[] bytes, String contentType, String filename) {
+        return stub.upsertLandingPainting(UpsertLandingPaintingRequest.newBuilder()
+                .setVisitorId(visitorId)
+                .setImageBytes(ByteString.copyFrom(bytes))
+                .setContentType(contentType == null ? "" : contentType)
+                .setOriginalFilename(filename == null ? "" : filename)
+                .build());
+    }
 }

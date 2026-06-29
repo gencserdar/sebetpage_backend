@@ -63,6 +63,37 @@ public final class ImageValidator {
         return new Validated(contentType, safeName, bytes);
     }
 
+  /** Landing-page visitor paintings — scoped by visitor id instead of user id. */
+    public static Validated validateLandingPainting(byte[] bytes, String visitorId) {
+        if (visitorId == null || !visitorId.matches("^[0-9a-fA-F\\-]{36}$")) {
+            throw ServiceException.invalid("Invalid visitor id");
+        }
+        if (bytes == null || bytes.length == 0) {
+            throw ServiceException.invalid("Empty file");
+        }
+        if (bytes.length > MAX_BYTES) {
+            throw ServiceException.invalid("Image too large (max " + (MAX_BYTES / (1024 * 1024)) + " MB)");
+        }
+
+        String contentType = sniff(bytes);
+        if (contentType == null) {
+            throw ServiceException.invalid("File doesn't look like a PNG/JPEG/GIF/WebP image");
+        }
+
+        rejectOversizedDimensions(bytes);
+
+        String ext = switch (contentType) {
+            case "image/png" -> "png";
+            case "image/jpeg" -> "jpg";
+            case "image/gif" -> "gif";
+            case "image/webp" -> "webp";
+            default -> "bin";
+        };
+
+        String safeName = "landing/" + visitorId.toLowerCase() + "/" + UUID.randomUUID() + "." + ext;
+        return new Validated(contentType, safeName, bytes);
+    }
+
     /** Inspect the first bytes for known image-format signatures. Returns
      *  the canonical Content-Type, or null if no match. */
     private static String sniff(byte[] b) {

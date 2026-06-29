@@ -58,6 +58,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/api/auth/**", "/ws/**", "/actuator/health", "/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/communities/search").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/landing/paintings/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/landing/paintings").permitAll()
                         .anyRequest().authenticated())
                 // Default Spring Security returns 403 when the SecurityContext
                 // is empty. Override to 401 so the frontend's apiService can
@@ -94,7 +96,8 @@ public class SecurityConfig {
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With"));
+                "X-Requested-With",
+                "X-Visitor-Id"));
         cfg.setExposedHeaders(List.of("x-new-token"));
         cfg.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();

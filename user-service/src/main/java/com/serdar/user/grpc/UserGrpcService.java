@@ -15,6 +15,7 @@ import com.serdar.user.entity.UserBlock;
 import com.serdar.user.entity.UserProfile;
 import com.serdar.user.service.BlockService;
 import com.serdar.user.service.FriendService;
+import com.serdar.user.service.LandingPaintingService;
 import com.serdar.user.service.ProfileService;
 import com.serdar.user.service.ProfileVisibilityService;
 import com.serdar.user.service.SearchService;
@@ -35,6 +36,7 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
     private final SearchService searchService;
     private final AuthClient authClient;
     private final ProfileVisibilityService profileVisibility;
+    private final LandingPaintingService landingPaintings;
 
     // ---- profile -----------------------------------------------------------
 
@@ -340,6 +342,49 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
         });
     }
 
+    // ---- landing paintings -------------------------------------------------
+
+    @Override
+    public void listLandingPaintings(ListLandingPaintingsRequest req, StreamObserver<LandingPaintingList> out) {
+        guard(out, () -> {
+            LandingPaintingList.Builder b = LandingPaintingList.newBuilder();
+            for (com.serdar.user.entity.LandingPainting p : landingPaintings.listRecent(req.getLimit())) {
+                b.addPaintings(toLandingPaintingProto(p));
+            }
+            out.onNext(b.build());
+            out.onCompleted();
+        });
+    }
+
+    @Override
+    public void getVisitorLandingPainting(StringRequest req, StreamObserver<LandingPainting> out) {
+        guard(out, () -> {
+            landingPaintings.findByVisitorId(req.getValue())
+                    .ifPresentOrElse(
+                            p -> {
+                                out.onNext(toLandingPaintingProto(p));
+                                out.onCompleted();
+                            },
+                            () -> {
+                                out.onNext(LandingPainting.newBuilder().setId(0).build());
+                                out.onCompleted();
+                            });
+        });
+    }
+
+    @Override
+    public void upsertLandingPainting(UpsertLandingPaintingRequest req, StreamObserver<LandingPainting> out) {
+        guard(out, () -> {
+            com.serdar.user.entity.LandingPainting saved = landingPaintings.upsert(
+                    req.getVisitorId(),
+                    req.getImageBytes().toByteArray(),
+                    req.getContentType(),
+                    req.getOriginalFilename());
+            out.onNext(toLandingPaintingProto(saved));
+            out.onCompleted();
+        });
+    }
+
     // ---- conversion helpers ------------------------------------------------
 
     private static com.serdar.proto.user.UserProfile frozenPublicProto(UserProfile p) {
@@ -377,6 +422,15 @@ public class UserGrpcService extends UserServiceGrpc.UserServiceImplBase {
                 .setBio(ns(p.getBio()))
                 .setSocialLinksJson(blankToDefault(p.getSocialLinksJson(), "[]"))
                 .setProfileCardJson(blankToDefault(p.getProfileCardJson(), "{\"widgets\":[]}"))
+                .build();
+    }
+
+    private static LandingPainting toLandingPaintingProto(com.serdar.user.entity.LandingPainting p) {
+        return LandingPainting.newBuilder()
+                .setId(p.getId())
+                .setVisitorId(ns(p.getVisitorId()))
+                .setImageUrl(ns(p.getImageUrl()))
+                .setCreatedAtMillis(p.getCreatedAt().toEpochMilli())
                 .build();
     }
 
